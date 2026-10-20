@@ -15,7 +15,7 @@ An event's group is immutable after creation. Moving a private event into a grou
 
 Group ownership guarantees a permanent administrator without requiring an initial membership row. Membership admins may promote/demote other membership admins, including themselves; they cannot remove the owner's implicit rights. There is no invitation or email lookup flow yet: admins add users by their existing record IDs. The `users` API still exposes only the authenticated user's own record.
 
-Removing membership revokes access immediately on the server, even to shared events that person created. Preference records can remain stored, but cannot be read or changed until access is restored. Future Android synchronization must remove inaccessible cached events/preferences and cancel their alarms. A device that remains offline cannot learn of revocation until it reconnects.
+Removing membership revokes access immediately on the server, even to shared events that person created. Preference records can remain stored, but cannot be read or changed until access is restored. Android removes inaccessible cached events and cancels their alarms on the next successful sync. It fetches preferences again for accessible events. A device that remains offline cannot learn of revocation until it reconnects.
 
 Deleting a group cascades to its membership rows and shared events; deleting an event cascades to its preferences. Deleting a group's owner account also cascades to the group. Account deletion remains superuser-only. Back up before deleting a group or owner account.
 

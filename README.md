@@ -1,6 +1,6 @@
 # TOKI
 
-TOKI is a deadline management project with a PocketBase backend and a planned Android app. It helps users remember meetings and recurring events, such as birthdays, through audible reminders—normally five minutes before an event.
+TOKI is a deadline management project with a PocketBase backend and a working Kotlin/Compose Android app. It helps users remember meetings and recurring events, such as birthdays, through audible reminders—normally five minutes before an event.
 
 The project follows the [initial design and backend setup discussion](https://chatgpt.com/share/6ad72066-9274-83eb-9568-a003b315f269).
 
@@ -9,10 +9,10 @@ The project follows the [initial design and backend setup discussion](https://ch
 - A remote PocketBase backend has been configured at `https://pocketbase.hacking-lab.com`.
 - This repository contains Python authorization and recurrence regression tests. The two-user remote suite returned **54 PASS, 0 FAIL**, including deletion of all four temporary records. Local group validation also passes the four-user private regression and group authorization checks described below.
 - Group events and personal reminder preferences are deployed to Jupiter; the live group suite passed **75 checks with 0 failures**. See [group events](backend/GROUPS.md).
-- The first Android milestone implements sign-in, Room caching, private/group deadline viewing, and timed one-off/recurring reminders. See the [Android guide](android/README.md) for setup, tests, and current limits.
+- The Android app implements sign-in, offline Room caching, private event creation, private/group deadline viewing, and timed one-off/recurring audible reminders. Its Agenda has compact event rows, toolbar search, and next-alarm/next-event tiles ordered by time. New events and displayed timestamps use the phone’s time zone by default. See the [Android guide](android/README.md) for setup, tests, and current limits.
 - Captured Docker deployment files, collection schema, access rules, and a fresh-instance migration are included. See the [backend guide](backend/README.md) for the verified local setup and remaining operational configuration.
 
-## Planned architecture
+## Architecture
 
 ```text
 PocketBase                         Android app
@@ -22,9 +22,9 @@ Recurrence rules                      Occurrence calculation
                                       AlarmManager → audible reminders
 ```
 
-PocketBase stores deadlines and controls access to each user's records. Android will cache deadlines locally, calculate upcoming occurrences, and schedule reminders on the device so that already scheduled reminders can work offline.
+PocketBase stores deadlines and controls access to each user's records. Android caches deadlines locally, calculates upcoming occurrences, and schedules reminders on the device so that cached reminders work offline. Synchronization runs on sign-in, after event creation, and when requested manually.
 
-The planned app stack is **Kotlin, Jetpack Compose, Room, and AlarmManager**. Implementation must account for alarm permissions, device restarts, background restrictions, and rescheduling after deadline changes.
+The app uses **Kotlin, Jetpack Compose, Room, and AlarmManager**. Alarm-clock scheduling drives a foreground audio player and a lock-screen Dismiss screen. Notification and exact-alarm permissions are required; full-screen alarm access enables the lock-screen display. Cached alarms are restored after reboot/unlock, app updates, and clock/time-zone changes.
 
 ## Deadline model
 
@@ -47,7 +47,7 @@ The test suite expects a `users` authentication collection and a `deadlines` col
 
 Private deadlines are visible only to their owner. Group deadlines are visible to group members and managed by group admins. Each user can keep private reminder preferences for a shared event. Ownership and an event's group are immutable. See the [group model and rollout guide](backend/GROUPS.md).
 
-PocketBase stores recurrence data; the planned Android app will calculate occurrences. For example, a Monday meeting at 09:00 in Zurich can use:
+PocketBase stores recurrence data; Android calculates occurrences locally. For example, a Monday meeting at 09:00 in Zurich can use:
 
 ```json
 {
@@ -59,18 +59,30 @@ PocketBase stores recurrence data; the planned Android app will calculate occurr
 }
 ```
 
-This excludes November 2 and adds November 4 at 09:00 local time. These exception strings follow the local-time format used by the current tests. The complete recurrence contract, including all-day events and ambiguous daylight-saving times, still needs to be defined.
+This excludes November 2 and adds November 4 at 09:00 local time. These exception strings follow the local-time format used by the current tests. Timed recurrence supports DST transitions, exclusions/additions, and offline advancement. Existing series keep their saved event zone, while the app displays times in the phone’s current zone. All-day reminders are not scheduled until an explicit reminder-time policy is defined. See the [recurrence contract](android/README.md#recurrence).
+
+## Use the Android app
+
+1. Install the debug build from Android Studio or follow the [build instructions](android/README.md#build-and-verify), then sign in with a PocketBase user account.
+2. Open **Alarms**, enable Notifications and Exact alarms, and enable Lock-screen display. Try the 30-second test before relying on reminders.
+3. In **Agenda**, tap **+ New event** to create a private event. Enabled, a five-minute reminder, a 60-minute duration, and the phone’s time zone are the defaults. The initial date/time is one hour ahead. Saving requires a connection and automatically syncs the event.
+4. The green **Next alarm** and blue **Next event** tiles show the earlier time on the left. After an alarm, the event stays visible as **Due soon** until its deadline. Past one-off events remain under **All**.
+5. Use the magnifying glass left of refresh to search; tap a compact event row for details. **Today** uses the phone’s date. Refresh after changes made in PocketBase.
+
+Existing event edits, group event creation, memberships, and personal reminder preferences are managed in PocketBase. Background sync and all-day alarms are not implemented. See the [Android guide](android/README.md) for limitations and troubleshooting.
 
 ## Repository layout
 
 ```text
-android/                         Kotlin/Compose Android application
-backend/pocketbase-tests/
-  testing.py                     API and local recurrence tests
+android/                         Kotlin/Compose Android application and tests
+backend/docker/                  Captured deployment and isolated local Compose setup
+backend/pb_migrations/           Baseline and group-event schema migrations
+backend/schema/                  Target collection schema and access rules
+backend/scripts/                 Jupiter migration rehearsal, deployment, and checks
+backend/fixtures/                Shared Python/Kotlin recurrence cases
+backend/pocketbase-tests/        API authorization, group, and recurrence tests
   config.ini.example             Configuration template
   config.ini                     Local credentials; ignored by Git
-  requirements.txt               pip dependencies
-  Pipfile / Pipfile.lock          Pipenv dependency configuration
 ```
 
 ## Run the tests
@@ -123,12 +135,12 @@ The suite creates disabled temporary deadlines with a `PBSEC-` prefix, updates t
 
 API tests cover authentication, own-record operations, cross-user and anonymous access attempts, recurrence exception persistence, and cleanup. Two local Python `dateutil` checks cover recurrence expansion and preservation of 09:00 Zurich time across the spring daylight-saving transition.
 
-The local recurrence checks do not validate Android recurrence calculation or reminders. Ownership-transfer tests target another real user. List checks filter by the known temporary record ID to avoid pagination gaps, and anonymous list access must not expose that record. Unexpectedly created records are tracked for cleanup, with other configured users tried if ownership has changed. These checks do not constitute a complete security audit.
+The Python recurrence checks do not execute Android code or validate audible delivery. Android has separate unit and phone UI tests; the latest feature checks passed 19 unit tests and four phone UI tests on October 20, 2026. See the [Android testing guide](android/README.md#build-and-verify). Ownership-transfer tests target another real user. List checks filter by the known temporary record ID to avoid pagination gaps, and anonymous list access must not expose that record. Unexpectedly created records are tracked for cleanup, with other configured users tried if ownership has changed. These checks do not constitute a complete security audit.
 
 ## Next steps
 
 1. Retain the verified migration backup and maintain the [deployment and recovery instructions](backend/GROUPS.md). Group sharing and SMTP are working on Jupiter.
 2. Validate a fresh backend installation with the strengthened regression suite.
 3. Define the all-day reminder-time policy. Timed recurrence, time zones, exclusions/additions, and shared Python/Kotlin fixtures are implemented.
-4. Extend Android with background synchronization and event/preference editing.
+4. Extend Android with background synchronization, editing existing events, group event creation, and personal preference controls.
 5. Verify reminders on devices, including offline operation, reboot recovery, permission changes, and edited or deleted events.
