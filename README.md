@@ -7,7 +7,8 @@ The project follows the [initial design and backend setup discussion](https://ch
 ## Current status
 
 - A remote PocketBase backend has been configured at `https://pocketbase.hacking-lab.com`.
-- This repository contains Python authorization and recurrence regression tests. The latest full run returned **54 PASS, 0 FAIL**, including deletion of all four temporary records.
+- This repository contains Python authorization and recurrence regression tests. The two-user remote suite returned **54 PASS, 0 FAIL**, including deletion of all four temporary records. Local group validation also passes the four-user private regression and group authorization checks described below.
+- Group events and personal reminder preferences are implemented and tested locally; the group migration has not yet been deployed to Jupiter. See [group events](backend/GROUPS.md).
 - Android development has not started; `android/` is empty.
 - Captured Docker deployment files, collection schema, access rules, and a fresh-instance migration are included. See the [backend guide](backend/README.md) for the verified local setup and remaining operational configuration.
 
@@ -31,7 +32,8 @@ The test suite expects a `users` authentication collection and a `deadlines` col
 
 | Field | Purpose |
 | --- | --- |
-| `owner` | Relation to the user who owns the deadline |
+| `owner` | Private owner or shared-event creator |
+| `group` | Optional group relation; empty for private events |
 | `title`, `description` | Event details |
 | `start_at` | Start timestamp represented in UTC |
 | `timezone` | IANA time zone, such as `Europe/Zurich` |
@@ -43,7 +45,7 @@ The test suite expects a `users` authentication collection and a `deadlines` col
 | `all_day` | Whether the event is an all-day event |
 | `enabled` | Whether the deadline is enabled |
 
-Users should be able to create, list, view, update, and delete their own deadlines. Other users and anonymous clients must not gain access. Users must not assign deadlines to someone else or transfer ownership.
+Private deadlines are visible only to their owner. Group deadlines are visible to group members and managed by group admins. Each user can keep private reminder preferences for a shared event. Ownership and an event's group are immutable. See the [group model and rollout guide](backend/GROUPS.md).
 
 PocketBase stores recurrence data; the planned Android app will calculate occurrences. For example, a Monday meeting at 09:00 in Zurich can use:
 
@@ -125,7 +127,7 @@ The local recurrence checks do not validate Android recurrence calculation or re
 
 ## Next steps
 
-1. Complete SMTP/server-settings documentation and verify backup restoration using the [backend guide](backend/README.md).
+1. Verify backup restoration and deploy the tested group migration using the [rollout guide](backend/GROUPS.md). SMTP is confirmed working on Jupiter.
 2. Validate a fresh backend installation with the strengthened regression suite.
 3. Define shared recurrence fixtures and semantics for time zones, birthdays, all-day events, exclusions, and additions.
 4. Implement Android authentication, synchronization, local persistence, recurrence calculation, and alarms.

@@ -4,7 +4,7 @@
 
 The files in `docker/Dockerfile` and `docker/docker-compose.yml` were copied from Jupiter. The Dockerfile defaults to PocketBase **0.40.5**, with Alpine 3.22 and amd64/arm64 support. This identifies the build configuration, not an independently inspected running Jupiter binary or image digest. Compose uses Traefik's external `transit` network, the `websecure` entrypoint, and `pocketbase.hacking-lab.com`, forwarding to port 8090.
 
-`schema/collections.json` contains the `users` and `deadlines` collection definitions extracted read-only from the supplied local database copy. `pb_migrations/1792454400_toki_schema.js` imports the same definitions using PocketBase's migration API. It preserves collection IDs, fields, indexes, access rules, password-auth configuration, and authentication feature enablement. It excludes records, server settings, token signing secrets, OAuth provider credentials, email templates, and custom token lifetimes; omitted settings use PocketBase defaults. This is a reproducible application schema, not a complete server backup.
+`pb_migrations/1792454400_toki_schema.js` imports the original `users` and `deadlines` definitions extracted read-only from the supplied local database copy. The subsequent group migration extends this baseline; `schema/collections.json` describes the combined target schema. See [group events](GROUPS.md) for its model, tests, and existing-server rollout instructions. The baseline preserves collection IDs, fields, indexes, access rules, password-auth configuration, and authentication feature enablement. It excludes records, server settings, token signing secrets, OAuth provider credentials, email templates, and custom token lifetimes; omitted settings use PocketBase defaults. This is a reproducible application schema, not a complete server backup.
 
 The copied `docker/pb_data/` remains ignored by Git. `.dockerignore` also excludes it from image build contexts. Never commit database files, backups, real environment files, account records, or SMTP credentials.
 
@@ -39,13 +39,13 @@ The named volume is retained for inspection. Use a new project name and adjust t
 ## Access rules
 
 - `users`: users can list/view only themselves; create/update/delete are superuser-only.
-- `deadlines`: list/view/delete require ownership; creation requires an authenticated matching owner; updates require ownership and an unchanged owner.
+- Private `deadlines` require ownership; shared deadlines use group membership and admin roles. See [group permissions](GROUPS.md).
 - Anonymous list queries return an empty list under the captured rules, which is a valid denial of record access.
 
 ## Deployment and operations
 
 The copied production Compose file does not include a migration mount. Before deploying a fresh server, arrange for the captured migrations to be present in `/pb/pb_migrations` before startup. Review migrations against backups before applying them to an existing instance. Do not run the local validation configuration against Jupiter's data.
 
-SMTP credentials, server settings, the exact running image digest, backup scheduling, and a tested restore procedure still need to be captured separately. Keep backup archives outside Git; verify restoration in a separate environment before upgrades. The supplied database copy includes WAL files and should not be treated as a verified restorable backup.
+SMTP is confirmed working on Jupiter. SMTP credentials and other server settings remain excluded from Git. The exact running image digest, backup scheduling, and a tested restore procedure still need to be captured separately. Keep backup archives outside Git; verify restoration in a separate environment before upgrades. The supplied database copy includes WAL files and should not be treated as a verified restorable backup.
 
 References: [PocketBase migrations](https://pocketbase.io/docs/js-migrations/), [API rules](https://pocketbase.io/docs/api-rules-and-filters/), and [deployment guidance](https://pocketbase.io/docs/going-to-production/).
