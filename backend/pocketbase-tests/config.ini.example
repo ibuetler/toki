@@ -7,5 +7,5 @@ ivan = user1@gmail.com
 marina = user2@gmail.com
 
 [passwords]
-user1 = REPLACE_WITH_PASSWORD
-user2 = REPLACE_WITH_PASSWORD
+ivan = REPLACE_WITH_PASSWORD
+marina = REPLACE_WITH_PASSWORD

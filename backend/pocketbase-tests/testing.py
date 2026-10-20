@@ -6,8 +6,6 @@ Uses temporary records only. Requires requests: pip install requests
 import argparse
 import configparser
 import datetime as dt
-import json
-import os
 import sys
 import uuid
 from zoneinfo import ZoneInfo
@@ -38,13 +36,13 @@ class Suite:
         self.cfg = config
         self.tag = 'PBSEC-' + uuid.uuid4().hex[:12]
 
-    def request(self, method, path, actor=None, payload=None):
+    def request(self, method, path, actor=None, payload=None, params=None):
         headers = {}
         if actor:
             headers['Authorization'] = 'Bearer ' + actor.token
         try:
             response = self.session.request(method, self.base + path,
-                headers=headers, json=payload, timeout=self.timeout)
+                headers=headers, json=payload, params=params, timeout=self.timeout)
             try:
                 data = response.json()
             except ValueError:
@@ -52,6 +50,15 @@ class Suite:
             return response.status_code, data
         except requests.RequestException as exc:
             return 0, {'message': str(exc)}
+
+    def list_record(self, rid, actor=None):
+        # Filter by the known temporary ID so pagination cannot hide the result.
+        return self.request('GET', f'{ROOT}/deadlines/records', actor,
+                            params={'filter': f'id = "{rid}"', 'perPage': 1})
+
+    def track_created(self, data, owner):
+        if data.get('id'):
+            self.created.append((owner, data['id']))
 
     def check(self, label, actual, expected, extra_ok=True, detail=''):
         ok = actual in expected and extra_ok
@@ -87,8 +94,7 @@ class Suite:
         good = bool(rid) and data.get('owner') == actor.uid
         self.check(f'{actor.alias}: create own deadline', code, {200}, good,
                    data.get('message', '') if not good else '')
-        if good:
-            self.created.append((actor, rid))
+        self.track_created(data, actor)
         return rid if good else None
 
     def run(self, aliases, attackers):
@@ -108,16 +114,20 @@ class Suite:
             code, data = self.request('GET', f'{base}/{rid}', actor)
             self.check(f'{actor.alias}: view own record', code, {200},
                        data.get('id') == rid)
-            code, data = self.request('GET', base, actor)
+            code, data = self.list_record(rid, actor)
             ids = {x['id'] for x in data.get('items', []) if 'id' in x}
             self.check(f'{actor.alias}: list includes own record', code, {200}, rid in ids)
             code, data = self.request('PATCH', f'{base}/{rid}', actor,
                                       {'description': 'Updated by test suite'})
             self.check(f'{actor.alias}: update own record', code, {200},
                        data.get('description') == 'Updated by test suite')
-            code, data = self.request('PATCH', f'{base}/{rid}', actor,
-                                      {'owner': 'invalidownerid'})
-            self.check(f'{actor.alias}: cannot change owner', code, {400, 403, 404})
+            for target in self.actors.values():
+                if target.uid == actor.uid:
+                    continue
+                code, data = self.request('PATCH', f'{base}/{rid}', actor,
+                                          {'owner': target.uid})
+                self.check(f'{actor.alias}: cannot transfer owner to {target.alias}',
+                           code, {400, 403, 404})
 
             # Another user's ID must not be visible, even if guessed.
             for other in self.actors.values():
@@ -132,9 +142,10 @@ class Suite:
                 self.check(f'{other.alias}: cannot delete {actor.alias} record', code, {404})
                 code, data = self.request('POST', base, other,
                                           self.new_deadline(actor.uid, self.tag + '-spoof'))
+                self.track_created(data, actor)
                 self.check(f'{other.alias}: cannot create for {actor.alias}', code,
                            {400, 403, 404})
-                code, data = self.request('GET', base, other)
+                code, data = self.list_record(rid, other)
                 other_ids = {x['id'] for x in data.get('items', []) if 'id' in x}
                 self.check(f'{other.alias}: list excludes {actor.alias} record', code,
                            {200}, rid not in other_ids)
@@ -148,7 +159,11 @@ class Suite:
             self.check('anonymous: cannot delete record', code, {403, 404})
             code, data = self.request('POST', base,
                                       payload=self.new_deadline(actor.uid, self.tag + '-anonymous'))
+            self.track_created(data, actor)
             self.check('anonymous: cannot create record', code, {400, 403, 404})
+            code, data = self.list_record(rid)
+            self.check('anonymous: list cannot expose record', code, {200, 403, 404},
+                       code != 200 or data.get('items') == [])
 
             # Check ownership and contents remain intact before cleanup.
             code, data = self.request('GET', f'{base}/{rid}', actor)
@@ -214,7 +229,15 @@ class Suite:
         print('\nCleanup of temporary records:')
         for actor, rid in self.created:
             code, data = self.request('DELETE', f'{ROOT}/deadlines/records/{rid}', actor)
-            self.check(f'{actor.alias}: delete own temporary record', code, {204})
+            if code != 204:
+                # A successful ownership-transfer attack may have hidden it.
+                for other in self.actors.values():
+                    if other.uid != actor.uid:
+                        retry, _ = self.request('DELETE', f'{ROOT}/deadlines/records/{rid}', other)
+                        if retry == 204:
+                            code = retry
+                            break
+            self.check(f'{actor.alias}: delete temporary record', code, {204})
             if code != 204:
                 print(f'  WARNING: manually remove test record {rid} if necessary')
 
@@ -222,7 +245,7 @@ class Suite:
 def main():
     parser = argparse.ArgumentParser(description='PocketBase multi-user authorization tests')
     selection = parser.add_mutually_exclusive_group(required=True)
-    selection.add_argument('-user', metavar='ALIAS', help='Run tests as one configured user')
+    selection.add_argument('-user', metavar='ALIAS', help='Select attacker; all configured users are authenticated')
     selection.add_argument('-all', action='store_true', help='Test all configured users')
     parser.add_argument('-config', default=str(Path(__file__).with_name('config.ini')))
     args = parser.parse_args()
@@ -231,7 +254,11 @@ def main():
         parser.error('Missing or invalid config.ini')
     aliases = list(cfg['users'])
     attackers = aliases if args.all else [args.user]
-    for alias in attackers:
+    if len(aliases) < 2:
+        parser.error('At least two configured users are required for cross-user tests')
+    if args.user and args.user not in aliases:
+        parser.error(f'Unknown user alias {args.user!r}')
+    for alias in aliases:
         if alias not in cfg['users'] or alias not in cfg['passwords']:
             parser.error(f'Missing user/password for alias {alias!r}')
     suite = Suite(cfg)

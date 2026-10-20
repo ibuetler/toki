@@ -7,7 +7,7 @@ The project follows the [initial design and backend setup discussion](https://ch
 ## Current status
 
 - A remote PocketBase backend has been configured at `https://pocketbase.hacking-lab.com`.
-- This repository contains Python authorization and recurrence regression tests. The latest full run returned **52 PASS, 0 FAIL**, including deletion of all four temporary records.
+- This repository contains Python authorization and recurrence regression tests. The latest full run returned **54 PASS, 0 FAIL**, including deletion of all four temporary records.
 - Android development has not started; `android/` is empty.
 - Backend deployment files, collection migrations, and API rules are not yet included. The tests require an already configured PocketBase instance.
 
@@ -84,7 +84,7 @@ python -m pip install -r requirements.txt
 cp config.ini.example config.ini
 ```
 
-Edit `config.ini` with your backend URL and existing test accounts. **Keys in `[users]` and `[passwords]` must match.** The current template uses `user1` and `user2` as password keys; change them to `ivan` and `marina`, respectively:
+Edit `config.ini` with your backend URL and existing test accounts. **Keys in `[users]` and `[passwords]` must match.** For example:
 
 ```ini
 [pocketbase]
@@ -121,12 +121,12 @@ The suite creates disabled temporary deadlines with a `PBSEC-` prefix, updates t
 
 API tests cover authentication, own-record operations, cross-user and anonymous access attempts, recurrence exception persistence, and cleanup. Two local Python `dateutil` checks cover recurrence expansion and preservation of 09:00 Zurich time across the spring daylight-saving transition.
 
-The local recurrence checks do not validate Android recurrence calculation or reminders. Current authorization coverage also has gaps: ownership changes use an invalid target user, list checks inspect only the first page, and anonymous list access is not tested.
+The local recurrence checks do not validate Android recurrence calculation or reminders. Ownership-transfer tests target another real user. List checks filter by the known temporary record ID to avoid pagination gaps, and anonymous list access must not expose that record. Unexpectedly created records are tracked for cleanup, with other configured users tried if ownership has changed. These checks do not constitute a complete security audit.
 
 ## Next steps
 
-1. Version-control the PocketBase schema, access rules, pinned version, and deployment configuration. The existing deployment was discussed as Docker behind Traefik with HTTPS and SMTP configured.
-2. Strengthen authorization tests and correct the configuration template aliases.
+1. Capture the actual PocketBase schema, access rules, pinned version, and deployment configuration using the [backend capture guide](backend/README.md).
+2. Validate a fresh backend installation with the strengthened regression suite.
 3. Define shared recurrence fixtures and semantics for time zones, birthdays, all-day events, exclusions, and additions.
 4. Implement Android authentication, synchronization, local persistence, recurrence calculation, and alarms.
 5. Verify reminders on devices, including offline operation, reboot recovery, permission changes, and edited or deleted events.

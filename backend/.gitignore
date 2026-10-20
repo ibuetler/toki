@@ -1,0 +1,5 @@
+pb_data/
+backups/
+.env
+.env.*
+!.env.example
