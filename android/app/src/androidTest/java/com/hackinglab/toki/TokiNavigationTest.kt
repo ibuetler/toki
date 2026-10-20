@@ -15,17 +15,17 @@ import java.io.File
 /** Synthetic UI data: never reads sessions, accesses the backend, or schedules alarms. */
 class TokiNavigationTest {
     @get:Rule val screen = createComposeRule()
-    private fun render(dark: Boolean = false, reminded: Boolean = false, onCreate: (com.hackinglab.toki.data.NewEvent) -> Unit = {}) {
+    private fun render(dark: Boolean = false, reminded: Boolean = false, includePast: Boolean = false, onCreate: (com.hackinglab.toki.data.NewEvent) -> Unit = {}) {
         val start = System.currentTimeMillis() + 3_600_000
         val events = listOf(
             Deadline().apply { id = "one"; title = "Project milestone"; timezone = "Europe/Zurich"; enabled = true; reminderMinutes = if (reminded) 120 else 0; startMillis = start },
             Deadline().apply { id = "two"; title = "Family birthday"; groupName = "Family"; timezone = "Europe/Zurich"; enabled = false; startMillis = start + 86_400_000 }
-        )
+        ).reversed() + if (includePast) listOf(Deadline().apply { id = "past"; title = "Earlier deadline"; timezone = "Europe/Zurich"; startMillis = start - 7_200_000 }) else emptyList()
         screen.setContent {
             TOKITheme(darkTheme = dark) {
                 TokiScreen(TokiState(ready = true, session = Session("preview", "preview", "hello@example.com"), deadlines = events,
                     notificationsAllowed = true, exactAllowed = true, fullScreenAllowed = true, scheduled = 1,
-                    previews = events.associate { it.id to EventPreview(it.startMillis, nextReminderStart = if (reminded && it.enabled) it.startMillis + 7 * 86_400_000L else it.startMillis) }),
+                    previews = events.associate { it.id to EventPreview(if (it.id == "past") null else it.startMillis, nextReminderStart = if (reminded && it.enabled) it.startMillis + 7 * 86_400_000L else it.startMillis) }),
                     onCreate = onCreate, onLogin = { _, _ -> }, onSync = {}, onLogout = {}, onTest = {}, onNotifications = {}, onExact = {}, onFullScreen = {})
             }
         }
@@ -84,6 +84,15 @@ class TokiNavigationTest {
         screen.onNodeWithText("Due soon").performScrollTo().assertIsDisplayed()
         screen.onNodeWithTag("event-one").performScrollTo().performClick()
         screen.onNodeWithText("The reminder time has passed. This event stays here until its deadline.").performScrollTo().assertIsDisplayed()
+    }
+    @Test fun allEventsSortByDisplayedDateIncludingPast() {
+        render(includePast = true)
+        screen.onNodeWithText("All").performClick()
+        screen.onNodeWithTag("event-past").performScrollTo()
+        val past = screen.onNodeWithTag("event-past").fetchSemanticsNode().boundsInRoot.top
+        val first = screen.onNodeWithTag("event-one").fetchSemanticsNode().boundsInRoot.top
+        val second = screen.onNodeWithTag("event-two").fetchSemanticsNode().boundsInRoot.top
+        org.junit.Assert.assertTrue(past < first && first < second)
     }
     @Test fun darkAgendaRenders() { render(true); screen.onNodeWithText("NEXT ALARM").assertIsDisplayed(); snapshot("toki-dark.png") }
 }

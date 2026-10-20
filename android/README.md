@@ -16,7 +16,7 @@ Kotlin/Compose app for `https://pocketbase.hacking-lab.com`, package `com.hackin
 ## Interface
 
 - **New event** on Agenda creates a private timed event. Enabled and the phone’s current time zone are preselected; the event zone can be changed before saving. The initial date/time is one hour ahead, the reminder is five minutes before, and duration is 60 minutes. Choose date/time, reminder offset, duration, and no repeat or daily/weekly/monthly/yearly repeat. Saving requires connectivity and automatically syncs the new event. Invalid time zones and nonexistent DST times are rejected.
-- **Agenda** shows compact green next-alarm and blue next-event tiles side by side, ordered by time with the earlier one on the left (alarm first for equal times, tiles without a time last), with times shown in the phone’s current time zone and countdowns. The next event stays visible after its reminder, until its deadline. Tap the magnifying glass to the left of refresh to search titles, descriptions, or groups. Clear the search to restore the full list. Compact event rows expand when tapped. Filter by Upcoming, Today (phone time zone), Groups, or All.
+- **Agenda** shows compact green next-alarm and blue next-event tiles side by side, ordered by time with the earlier one on the left (alarm first for equal times, tiles without a time last), with times shown in the phone’s current time zone and countdowns. The next event stays visible after its reminder, until its deadline. Tap the magnifying glass to the left of refresh to search titles, descriptions, or groups. Clear the search to restore the full list. Compact event rows expand when tapped. Rows sort by the displayed deadline ascending; events without a future occurrence use their original date, including past events under All. Equal dates sort by title and record ID. Date headings include the year; events on the same phone-local date share a subtle border color. A six-color palette cycles across dates. Always check the year when similarly named dates appear in different years. Filter by Upcoming, Today (phone time zone), Groups, or All.
 - Tap an event card for its description, reminder offset, recurrence rule, or an explanation of disabled/invalid reminders. Use All to inspect past events and events without a valid next occurrence.
 - **Alarms** brings permission setup, the 30-second sound test, and delivery timing together.
 - **Account** shows the connected account, private/shared event counts, manual sync, and sign-out.
@@ -69,7 +69,7 @@ Sync runs on sign-in, after event creation, or explicitly through refresh/**Sync
 
 ## Build and verify
 
-Latest feature verification on October 20, 2026: **19 unit tests and four navigation/form UI tests passed** on the connected Android 16 phone. Build and lint passed. A temporary creation payload was accepted and read back from the live backend, then that exact test record was deleted. These checks do not replace audible alarm, offline, or reboot testing.
+Latest feature verification on October 20, 2026: **19 unit tests and five navigation/form UI tests passed** on the connected Android 16 phone. Build and lint passed. A temporary creation payload was accepted and read back from the live backend, then that exact test record was deleted. These checks do not replace audible alarm, offline, or reboot testing.
 
 Use Android Studio's configured JDK/SDK and the committed Gradle wrapper:
 

@@ -1,11 +1,13 @@
 package com.hackinglab.toki
 
 import androidx.annotation.DrawableRes
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
@@ -74,7 +76,7 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
             "Upcoming" -> next != null && next > now
             else -> true
         }
-    }.sortedBy { state.previews[it.id]?.nextStart ?: Long.MAX_VALUE }
+    }.sortedWith(compareBy<Deadline> { state.previews[it.id]?.nextStart ?: it.startMillis }.thenBy { it.title.lowercase() }.thenBy { it.id })
     val next = state.deadlines.filter { it.enabled && state.previews[it.id]?.problem == null }
         .mapNotNull { e -> state.previews[e.id]?.let { it.nextReminderStart ?: it.nextStart }?.let { start -> e to EventTime.reminderAt(start, e.reminderMinutes) } }
         .filter { it.second > now }.minByOrNull { it.second }
@@ -93,7 +95,7 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
                 }
             }
         }) { insets ->
-        LazyColumn(Modifier.fillMaxSize().padding(insets), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(if (signedIn && tab == 0) 12.dp else 20.dp)) {
+        LazyColumn(Modifier.fillMaxSize().padding(insets), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(if (signedIn && tab == 0) 8.dp else 20.dp)) {
             item {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                     Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -176,7 +178,22 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
                         Text("${visible.size} ${if (visible.size == 1) "event" else "events"}", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     } }
                     if (visible.isEmpty()) item { EmptyEvents(query, filter, state.deadlines.isEmpty(), onSync) }
-                    items(visible, key = { it.id }) { event -> EventCard(event, state.previews[event.id], permissionReady, now) }
+                    itemsIndexed(visible, key = { _, event -> event.id }) { index, event ->
+                        val start = state.previews[event.id]?.nextStart ?: event.startMillis
+                        val day = Instant.ofEpochMilli(start).atZone(ZoneId.systemDefault()).toLocalDate()
+                        val previous = visible.getOrNull(index - 1)?.let { previous ->
+                            Instant.ofEpochMilli(state.previews[previous.id]?.nextStart ?: previous.startMillis).atZone(ZoneId.systemDefault()).toLocalDate()
+                        }
+                        val colors = listOf(Color(0xFF4A9B8B), Color(0xFF648DD1), Color(0xFFAC83C6), Color(0xFFCC9A45), Color(0xFFCC8091), Color(0xFF66A3AF))
+                        val border = colors[Math.floorMod(day.toEpochDay(), colors.size.toLong()).toInt()]
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            if (day != previous) Text(date(start, pattern = "EEE, d MMM yyyy"),
+                                Modifier.padding(top = if (index == 0) 0.dp else 6.dp, start = 4.dp),
+                                style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            EventCard(event, state.previews[event.id], permissionReady, now, border)
+                        }
+                    }
                     item { Text(if (state.lastSync == 0L) "Not synced yet" else "Synced ${date(state.lastSync)} · Available offline", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 }
                 1 -> {
@@ -297,21 +314,21 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
     }
 }
 
-@Composable private fun EventCard(event: Deadline, preview: EventPreview?, permissionsReady: Boolean, now: Long) {
+@Composable private fun EventCard(event: Deadline, preview: EventPreview?, permissionsReady: Boolean, now: Long, dateColor: Color) {
     var expanded by rememberSaveable(event.id) { mutableStateOf(false) }
     val time = preview?.nextStart ?: event.startMillis
     val reminderPassed = preview?.nextStart != null && EventTime.reminderAt(preview.nextStart, event.reminderMinutes) <= now
     val status = when { !event.enabled -> "Off"; preview?.problem != null -> "Needs attention"; preview?.nextStart == null -> "Finished"; reminderPassed -> "Due soon"; !permissionsReady -> "Setup needed"; else -> "Alarm on" }
     val active = status == "Alarm on"
-    Card(modifier = Modifier.testTag("event-${event.id}"), onClick = { expanded = !expanded }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.widthIn(min = 54.dp)) {
+    Card(border = BorderStroke(1.5.dp, dateColor), modifier = Modifier.testTag("event-${event.id}"), shape = MaterialTheme.shapes.small, onClick = { expanded = !expanded }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(Modifier.heightIn(min = 48.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.widthIn(min = 50.dp)) {
                     Text(date(time, pattern = "HH:mm"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text(date(time, pattern = "d MMM"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(date(time, pattern = if (Instant.ofEpochMilli(time).atZone(ZoneId.systemDefault()).year == Instant.ofEpochMilli(now).atZone(ZoneId.systemDefault()).year) "d MMM" else "d MMM yy"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(event.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(event.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                         Glyph(if (event.groupName.isBlank()) R.drawable.ic_lock else R.drawable.ic_group, Modifier.size(12.dp))
                         Text("${event.groupName.ifBlank { "Private" }} · ${if (event.rrule.isBlank()) "One-time" else repeatLabel(event.rrule)}",
@@ -324,6 +341,7 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
             }
             if (expanded) {
                 HorizontalDivider()
+                Text(event.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Text("${date(time)} · ${ZoneId.systemDefault().id}", style = MaterialTheme.typography.bodyMedium)
                 if (event.timezone != ZoneId.systemDefault().id)
                     Text("Event time: ${date(time, event.timezone)} · ${event.timezone}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
