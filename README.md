@@ -9,7 +9,7 @@ The project follows the [initial design and backend setup discussion](https://ch
 - A remote PocketBase backend has been configured at `https://pocketbase.hacking-lab.com`.
 - This repository contains Python authorization and recurrence regression tests. The two-user remote suite returned **54 PASS, 0 FAIL**, including deletion of all four temporary records. Local group validation also passes the four-user private regression and group authorization checks described below.
 - Group events and personal reminder preferences are deployed to Jupiter; the live group suite passed **75 checks with 0 failures**. See [group events](backend/GROUPS.md).
-- Android development has not started; `android/` is empty.
+- The first Android milestone implements sign-in, Room caching, private/group deadline viewing, and timed one-off reminders. See the [Android guide](android/README.md) for setup, tests, and current limits.
 - Captured Docker deployment files, collection schema, access rules, and a fresh-instance migration are included. See the [backend guide](backend/README.md) for the verified local setup and remaining operational configuration.
 
 ## Planned architecture
@@ -64,7 +64,7 @@ This excludes November 2 and adds November 4 at 09:00 local time. These exceptio
 ## Repository layout
 
 ```text
-android/                         Planned Android application
+android/                         Kotlin/Compose Android application
 backend/pocketbase-tests/
   testing.py                     API and local recurrence tests
   config.ini.example             Configuration template
@@ -130,5 +130,5 @@ The local recurrence checks do not validate Android recurrence calculation or re
 1. Retain the verified migration backup and maintain the [deployment and recovery instructions](backend/GROUPS.md). Group sharing and SMTP are working on Jupiter.
 2. Validate a fresh backend installation with the strengthened regression suite.
 3. Define shared recurrence fixtures and semantics for time zones, birthdays, all-day events, exclusions, and additions.
-4. Implement Android authentication, synchronization, local persistence, recurrence calculation, and alarms.
+4. Extend the Android milestone with recurrence calculation, background synchronization, and event/preference editing.
 5. Verify reminders on devices, including offline operation, reboot recovery, permission changes, and edited or deleted events.
