@@ -8,12 +8,15 @@ import java.util.TimeZone
 /** Timed recurrence contract: event-zone wall time, gap skipped, overlap's first offset. */
 object OccurrencePlanner {
     data class Occurrence(val startMillis: Long, val reminderMillis: Long)
-    fun next(event: Deadline, afterMillis: Long): Occurrence? {
+    fun next(event: Deadline, afterMillis: Long): Occurrence? = nextOccurrence(event, afterMillis, false)
+    /** Agenda visibility follows the deadline, independently of reminder delivery. */
+    fun nextEvent(event: Deadline, afterMillis: Long): Occurrence? = nextOccurrence(event, afterMillis, true)
+    private fun nextOccurrence(event: Deadline, afterMillis: Long, byDeadline: Boolean): Occurrence? {
         require(event.rrule.isBlank() || event.recurrenceLoaded) { "Sync once to load recurrence exceptions." }
         require(!event.allDay) { "All-day reminder time is not configured yet." }
         require(event.reminderMinutes in 0..525600) { "Invalid reminder offset." }
         val zone = ZoneId.of(event.timezone)
-        val threshold = Math.addExact(afterMillis, event.reminderMinutes.toLong() * 60_000)
+        val threshold = Math.addExact(afterMillis, if (byDeadline) 0L else event.reminderMinutes.toLong() * 60_000)
         val excluded = dates(event.exdates, zone).toSet()
         val candidates = dates(event.rdates, zone).filter { it > threshold && it !in excluded }.toMutableList()
         // DTSTART belongs to the recurrence set even if BY* doesn't match it.

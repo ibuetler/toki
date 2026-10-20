@@ -20,6 +20,21 @@ class OccurrencePlannerTest {
             }
         }
     }
+    @Test fun agendaKeepsOneOffAfterReminderUntilDeadline() {
+        val e = event("2026-10-20T14:30:00Z").apply { reminderMinutes = 30 }
+        val afterAlarm = millis("2026-10-20T14:01:00Z")
+        assertNull(OccurrencePlanner.next(e, afterAlarm))
+        assertEquals(e.startMillis, OccurrencePlanner.nextEvent(e, afterAlarm)!!.startMillis)
+        assertNull(OccurrencePlanner.nextEvent(e, e.startMillis))
+    }
+    @Test fun recurringAgendaKeepsCurrentDeadlineWhileAlarmAdvances() {
+        val e = event("2026-10-20T14:30:00Z", "FREQ=WEEKLY").apply { reminderMinutes = 30 }
+        val afterAlarm = millis("2026-10-20T14:01:00Z")
+        assertEquals(e.startMillis, OccurrencePlanner.nextEvent(e, afterAlarm)!!.startMillis)
+        val nextWeek = millis("2026-10-27T15:30:00Z") // Zurich DST ends between occurrences.
+        assertEquals(nextWeek, OccurrencePlanner.next(e, afterAlarm)!!.startMillis)
+        assertEquals(nextWeek, OccurrencePlanner.nextEvent(e, e.startMillis)!!.startMillis)
+    }
     @Test fun sharedPythonAndKotlinFixtures() {
         val stream = javaClass.classLoader!!.getResourceAsStream("recurrence.tsv")!!
         stream.bufferedReader().useLines { lines -> lines.drop(1).forEach { line ->

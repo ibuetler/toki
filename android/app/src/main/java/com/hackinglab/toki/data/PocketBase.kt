@@ -67,6 +67,16 @@ class PocketBase {
             array.getString(it).also { value -> require(!value.contains('\n') && !value.contains('\r')) }
         }
     }
+    fun createDeadline(session: Session, draft: NewEvent) {
+        val event = draft.deadline()
+        request("/api/collections/deadlines/records", session.token, JSONObject()
+            .put("owner", session.userId).put("group", "")
+            .put("title", event.title).put("description", event.description)
+            .put("start_at", Instant.ofEpochMilli(event.startMillis).toString())
+            .put("timezone", event.timezone).put("enabled", event.enabled)
+            .put("all_day", false).put("duration_minutes", draft.durationMinutes)
+            .put("reminder_minutes", event.reminderMinutes).put("rrule", event.rrule))
+    }
     fun deadlines(session: Session): List<Deadline> {
         val groups = all("groups", session.token).associate { it.getString("id") to it.getString("name") }
         val preferences = all("deadline_preferences", session.token)
