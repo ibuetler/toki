@@ -1,0 +1,11 @@
+[pocketbase]
+url = https://pocketbase.hacking-lab.com
+timeout = 15
+
+[users]
+ivan = user1@gmail.com
+marina = user2@gmail.com
+
+[passwords]
+user1 = REPLACE_WITH_PASSWORD
+user2 = REPLACE_WITH_PASSWORD
