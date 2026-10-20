@@ -7,6 +7,10 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <application
         android:allowBackup="false"
         android:usesCleartextTraffic="false"
@@ -17,6 +21,8 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.TOKI">
+        <service android:name=".AlarmService" android:exported="false" android:foregroundServiceType="mediaPlayback" />
+        <activity android:name=".AlarmActivity" android:exported="false" android:excludeFromRecents="true" android:launchMode="singleTop" android:theme="@style/Theme.TOKI" />
         <receiver android:name=".ReminderReceiver" android:exported="false" />
         <receiver android:name=".RescheduleReceiver" android:exported="false">
             <intent-filter>

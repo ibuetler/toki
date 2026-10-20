@@ -54,6 +54,8 @@ class MainActivity : ComponentActivity() {
                     if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED)
                         notifications.launch(Manifest.permission.POST_NOTIFICATIONS)
                     else startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName))
+                }, onFullScreen = {
+                    if (Build.VERSION.SDK_INT >= 34) startActivity(Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.parse("package:$packageName")))
                 }, onExact = {
                     if (Build.VERSION.SDK_INT >= 31) startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:$packageName")))
                 })
@@ -63,7 +65,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun TokiScreen(state: TokiState, model: TokiViewModel, onNotifications: () -> Unit, onExact: () -> Unit) {
+private fun TokiScreen(state: TokiState, model: TokiViewModel, onNotifications: () -> Unit, onExact: () -> Unit, onFullScreen: () -> Unit) {
     var email by rememberSaveable { mutableStateOf("") }
     var password by remember { mutableStateOf("") } // Never saved to disk or instance state.
     Scaffold { insets ->
@@ -112,12 +114,13 @@ private fun TokiScreen(state: TokiState, model: TokiViewModel, onNotifications: 
                 OutlinedCard {
                     Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text("Ready to remind you", style = MaterialTheme.typography.titleMedium)
-                        Text("Allow notifications and exact alarms, then try a reminder with your screen locked.")
+                        Text("Alarms ring until dismissed (up to 2 minutes). Allow lock-screen alarms to show the Dismiss screen while locked.")
                         if (!state.notificationsAllowed) OutlinedButton(onClick = onNotifications, enabled = !state.busy) { Text("Allow notifications") }
                         if (!state.exactAllowed) OutlinedButton(onClick = onExact, enabled = !state.busy) { Text("Allow exact alarms") }
+                        if (!state.fullScreenAllowed) OutlinedButton(onClick = onFullScreen, enabled = !state.busy) { Text("Allow lock-screen alarms") }
                         if (state.notificationsAllowed && state.exactAllowed) Text("Permissions ready", color = MaterialTheme.colorScheme.primary)
-                        OutlinedButton(onClick = model::testReminder, enabled = !state.busy && state.notificationsAllowed && state.exactAllowed) { Text("Test sound in 30 seconds") }
-                        Text("Sound follows your alarm volume, channel settings, and Do Not Disturb settings.", style = MaterialTheme.typography.bodySmall)
+                        OutlinedButton(onClick = model::testReminder, enabled = !state.busy && state.notificationsAllowed && state.exactAllowed) { Text("Test alarm in 30 seconds") }
+                        Text("Sound uses alarm volume and respects Do Not Disturb. Lock-screen display needs the extra permission above.", style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }

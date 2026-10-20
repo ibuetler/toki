@@ -4,8 +4,6 @@ import android.Manifest
 import android.app.*
 import android.content.*
 import android.content.pm.PackageManager
-import android.media.AudioAttributes
-import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
@@ -17,12 +15,12 @@ import com.hackinglab.toki.data.EventTime
 class Reminders(private val context: Context) {
     private val alarms = context.getSystemService(AlarmManager::class.java)
     private val prefs = context.getSharedPreferences("alarms", Context.MODE_PRIVATE)
-    companion object { const val CHANNEL = "toki_reminders_v1"; const val TEST = "__local_test__" }
+    companion object { const val CHANNEL = "toki_alarm_playback_v2"; const val TEST = "__local_test__" }
     init {
         val channel = NotificationChannel(CHANNEL, "Audible reminders", NotificationManager.IMPORTANCE_HIGH).apply {
             description = "Sounds for TOKI deadlines and test reminders"
-            setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM), AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
+            // AlarmService owns looping audio. Avoid a second notification sound.
+            setSound(null, null)
             enableVibration(true)
             lockscreenVisibility = Notification.VISIBILITY_PRIVATE
         }
@@ -32,12 +30,14 @@ class Reminders(private val context: Context) {
     fun notificationsAllowed(): Boolean = NotificationManagerCompat.from(context).areNotificationsEnabled() &&
         (Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) &&
         context.getSystemService(NotificationManager::class.java).getNotificationChannel(CHANNEL).importance != NotificationManager.IMPORTANCE_NONE
+    fun fullScreenAllowed() = Build.VERSION.SDK_INT < 34 || context.getSystemService(NotificationManager::class.java).canUseFullScreenIntent()
     fun ready() = exactAllowed() && notificationsAllowed()
     private fun pending(id: String): PendingIntent = PendingIntent.getBroadcast(context, 0,
         Intent(context, ReminderReceiver::class.java).setData(Uri.Builder().scheme("toki").authority("reminder").appendPath(id).build()),
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     private fun set(id: String, time: Long) { alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, time, pending(id)) }
     fun cancelAll() {
+        context.stopService(Intent(context, AlarmService::class.java))
         prefs.getStringSet("ids", emptySet())!!.forEach { alarms.cancel(pending(it)) }
         alarms.cancel(pending(TEST))
         prefs.edit().clear().commit()
@@ -76,13 +76,15 @@ class Reminders(private val context: Context) {
     }
     fun show(id: String, title: String, message: String) {
         if (!notificationsAllowed()) return
-        val open = PendingIntent.getActivity(context, 0, Intent(context, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        val notification = NotificationCompat.Builder(context, CHANNEL)
-            .setSmallIcon(R.drawable.ic_reminder).setContentTitle(title).setContentText(message)
-            .setCategory(NotificationCompat.CATEGORY_ALARM).setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
-            .setContentIntent(open).setAutoCancel(true).build()
-        try { NotificationManagerCompat.from(context).notify(id, 1, notification) }
-        catch (_: SecurityException) { /* Permission can be revoked after the check. */ }
+        try {
+            ContextCompat.startForegroundService(context, Intent(context, AlarmService::class.java)
+                .putExtra("id", id).putExtra("title", title).putExtra("message", message))
+        } catch (_: IllegalStateException) {
+            // If the OS rejects a foreground launch, keep a visible fallback.
+            val notification = NotificationCompat.Builder(context, CHANNEL).setSmallIcon(R.drawable.ic_reminder)
+                .setContentTitle(title).setContentText("Open TOKI: alarm playback was blocked by Android.").build()
+            try { NotificationManagerCompat.from(context).notify(id, 1, notification) } catch (_: SecurityException) { }
+        }
     }
 }
 

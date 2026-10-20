@@ -13,7 +13,7 @@ import kotlinx.coroutines.withContext
 data class TokiState(val ready: Boolean = false, val session: Session? = null,
     val deadlines: List<Deadline> = emptyList(), val busy: Boolean = false,
     val message: String? = null, val lastSync: Long = 0, val scheduled: Int = 0,
-    val exactAllowed: Boolean = false, val notificationsAllowed: Boolean = false)
+    val exactAllowed: Boolean = false, val notificationsAllowed: Boolean = false, val fullScreenAllowed: Boolean = false)
 
 class TokiViewModel(application: Application) : AndroidViewModel(application) {
     private val graph = TokiGraph.get(application)
@@ -24,7 +24,7 @@ class TokiViewModel(application: Application) : AndroidViewModel(application) {
         val count = graph.reschedule()
         mutable.value = mutable.value.copy(ready = true, session = graph.sessions.load(),
             deadlines = graph.database.deadlines().all(), lastSync = graph.prefs.getLong("lastSync", 0),
-            scheduled = count, exactAllowed = graph.reminders.exactAllowed(), notificationsAllowed = graph.reminders.notificationsAllowed())
+            scheduled = count, fullScreenAllowed = graph.reminders.fullScreenAllowed(), exactAllowed = graph.reminders.exactAllowed(), notificationsAllowed = graph.reminders.notificationsAllowed())
     }
     private fun action(work: () -> Unit) {
         if (mutable.value.busy) return
@@ -54,6 +54,6 @@ class TokiViewModel(application: Application) : AndroidViewModel(application) {
     fun permissionsChanged() = action { reload() }
     fun testReminder() = action {
         graph.reminders.test()
-        mutable.value = mutable.value.copy(message = "Test reminder set for 30 seconds from now. Lock your phone to try it.")
+        mutable.value = mutable.value.copy(message = "Test alarm set for 30 seconds from now. Lock your phone to try it.")
     }
 }
