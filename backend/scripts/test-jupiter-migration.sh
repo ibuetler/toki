@@ -40,10 +40,16 @@ migration=1792454401_group_events.js
 [[ -f "$backend_dir/pb_migrations/$migration" ]] || { echo 'Migration file is missing' >&2; exit 1; }
 command -v ssh >/dev/null
 command -v tar >/dev/null
+export COPYFILE_DISABLE=1
+if tar --version 2>/dev/null | grep -q bsdtar; then
+  tar_flags=(--no-xattrs --no-acls --no-fflags)
+else
+  tar_flags=()
+fi
 printf 'Rehearsing %s on %s; production container %s is read-only input.\n' "$migration" "$host" "$source_container"
 # The remote outer trap removes the uploaded script, snapshot, and comparison copy.
 # The worker's trap removes only the uniquely named rehearsal container it created.
 remote_command="set -eu; umask 077; work=\$(mktemp -d /tmp/toki-migration-test.XXXXXXXX); trap 'rm -rf -- \"\$work\"' EXIT HUP INT TERM; tar -xf - -C \"\$work\"; bash \"\$work/rehearse-migration-remote.sh\" '$source_container' '$data_dir' \"\$work\""
-tar -C "$script_dir" -cf - rehearse-migration-remote.sh \
+tar "${tar_flags[@]}" -C "$script_dir" -cf - rehearse-migration-remote.sh \
   -C "$backend_dir/pb_migrations" "$migration" |
   ssh -o BatchMode=yes "$host" "$remote_command"

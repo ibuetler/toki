@@ -88,3 +88,30 @@ The script uploads only the migration and a worker script, takes a consistent da
 A successful run exits zero and ends with `Migration rehearsal passed`. It does **not** deploy the migration, test SMTP, or exercise REST authorization. Use the separate group integration suite for API coverage. It refuses a database where group collections already exist rather than claiming to test the migration twice.
 
 The SSH transport was simulated locally for verification; the full backup/migration/comparison flow ran against the copied pre-group database with real Docker and preserved its two users and one deadline. Actual SSH connectivity, remote permissions, and dependencies on Jupiter remain to be checked by running the command above.
+
+## Deploy from macOS over SSH
+
+Run this from the local repository when you are ready for a brief PocketBase outage:
+
+```sh
+./backend/scripts/apply-jupiter-migration.sh --host root@jupiter
+```
+
+This command **applies the migration to the live backend**. Defaults are `/opt/applic/pocketbase` and container `pocketbase`; use `--app-dir` and `--container` to override them. It uses key-based SSH and requires remote Python 3, tar, Docker Compose, and permission to read/write the application directory. No local Python packages or database credentials are required.
+
+The script:
+
+1. Runs the isolated SSH rehearsal and proceeds only if it passes.
+2. Checks that the selected live container, Compose project, data directory, image, and pre-group schema agree.
+3. Stops PocketBase, archives the complete `pb_data` directory into a private `backups-toki-groups-*` directory beside it, extracts that archive, and checks the restored databases for integrity.
+4. Installs only the group migration. If needed, creates a conventional Compose override with a persistent migration-directory mount, preserving the base file and existing migrations. An existing custom override without this mount must be updated manually first; the script refuses to overwrite it.
+5. Recreates PocketBase using the exact previously running image, without building or pulling an update.
+6. Checks HTTP health inside the container, migration history, the new collections/rules, unchanged original application records, and empty group relations on original deadlines.
+
+The backup remains on Jupiter; its path is printed. Backup archives contain sensitive records and must remain private. Temporary working copies and rehearsal containers are removed. Avoid editing records during rollout: concurrent edits immediately after restart can fail the strict before/after comparison.
+
+If backup or preparation fails before migration is attempted, the original container is restarted. If startup or post-migration checks fail, the script stops PocketBase and leaves the backup for manual recovery. It does not automatically replace live data. The backup directory contains `pb_data.tar.gz`, `compose.before`, the prior override if any, and `image.before`. Restore while PocketBase is stopped, preserve the failed data separately for diagnosis, restore the previous Compose files, remove the new migration/override if they were added, and restore the archive before starting the old configuration. Never start the old schema with the group migration still pending in its mounted directory.
+
+The script checks database preservation and health without creating production accounts or events. You can subsequently run `backend/pocketbase-tests/testing.py -all` from your configured Python environment for the normal two-user API regression. The disposable `group_tests.py` runner remains restricted to local test instances.
+
+The complete deployment was verified against a disposable local backend using real Docker and simulated SSH. Injected backup failure restarted the original service; injected post-migration verification failure stopped it and retained the backup. Jupiter deployment is performed only when you run the command above.
