@@ -6,7 +6,7 @@ import com.hackinglab.toki.data.*
 
 class TokiGraph private constructor(context: Context) {
     val lock = Any()
-    val database = Room.databaseBuilder(context, TokiDatabase::class.java, "toki.db").build()
+    val database = Room.databaseBuilder(context, TokiDatabase::class.java, "toki.db").addMigrations(CACHE_MIGRATION).build()
     val sessions = SessionStore(context)
     val reminders = Reminders(context)
     val api = PocketBase()
@@ -41,6 +41,14 @@ class TokiGraph private constructor(context: Context) {
         }
     }
     companion object {
+        val CACHE_MIGRATION = object : androidx.room.migration.Migration(1, 2) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE deadlines ADD COLUMN exdates TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE deadlines ADD COLUMN rdates TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE deadlines ADD COLUMN recurrenceLoaded INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         @Volatile private var instance: TokiGraph? = null
         fun get(context: Context): TokiGraph = instance ?: synchronized(this) {
             instance ?: TokiGraph(context.applicationContext).also { instance = it }

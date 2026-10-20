@@ -10,10 +10,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+data class EventPreview(val nextStart: Long? = null, val problem: String? = null)
+
 data class TokiState(val ready: Boolean = false, val session: Session? = null,
     val deadlines: List<Deadline> = emptyList(), val busy: Boolean = false,
     val message: String? = null, val lastSync: Long = 0, val scheduled: Int = 0,
-    val exactAllowed: Boolean = false, val notificationsAllowed: Boolean = false, val fullScreenAllowed: Boolean = false, val testAt: Long = 0, val testDelay: Long = -1)
+    val exactAllowed: Boolean = false, val notificationsAllowed: Boolean = false, val fullScreenAllowed: Boolean = false, val testAt: Long = 0, val testDelay: Long = -1, val previews: Map<String, EventPreview> = emptyMap())
 
 class TokiViewModel(application: Application) : AndroidViewModel(application) {
     private val graph = TokiGraph.get(application)
@@ -22,8 +24,12 @@ class TokiViewModel(application: Application) : AndroidViewModel(application) {
     init { action { reload() } }
     private fun reload() {
         val count = graph.reschedule()
+        val records = graph.database.deadlines().all()
+        val previews = records.associate { event -> event.id to try {
+            EventPreview(OccurrencePlanner.next(event, System.currentTimeMillis())?.startMillis)
+        } catch (error: Exception) { EventPreview(problem = error.message ?: "Invalid recurrence settings") } }
         mutable.value = mutable.value.copy(ready = true, session = graph.sessions.load(),
-            deadlines = graph.database.deadlines().all(), lastSync = graph.prefs.getLong("lastSync", 0),
+            deadlines = records, previews = previews, lastSync = graph.prefs.getLong("lastSync", 0),
             scheduled = count, testAt = graph.reminders.pendingTestAt(), testDelay = graph.reminders.lastTestDelay(), fullScreenAllowed = graph.reminders.fullScreenAllowed(), exactAllowed = graph.reminders.exactAllowed(), notificationsAllowed = graph.reminders.notificationsAllowed())
     }
     private fun action(work: () -> Unit) {

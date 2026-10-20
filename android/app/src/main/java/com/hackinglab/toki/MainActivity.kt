@@ -142,9 +142,9 @@ private fun TokiScreen(state: TokiState, model: TokiViewModel, onNotifications: 
             if (state.session != null) {
                 item { Text("Your events", style = MaterialTheme.typography.titleLarge) }
                 if (state.deadlines.isEmpty()) item { Text("No events cached yet. Add deadlines in PocketBase, then tap Sync now.") }
-                items(state.deadlines, key = { it.id }) { event -> DeadlineCard(event) }
+                items(state.deadlines.sortedBy { state.previews[it.id]?.nextStart ?: Long.MAX_VALUE }, key = { it.id }) { event -> DeadlineCard(event, state.previews[event.id]) }
             }
-            item { Text("First milestone · Timed one-off reminders. Recurring and all-day reminders are coming next.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            item { Text("Timed recurring reminders work offline. All-day reminder timing is coming next.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
     }
 }
@@ -155,17 +155,18 @@ private fun formatTime(millis: Long, timezone: String): String {
 }
 
 @Composable
-private fun DeadlineCard(event: Deadline) {
+private fun DeadlineCard(event: Deadline, preview: EventPreview?) {
     OutlinedCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(if (event.groupName.isBlank()) "PRIVATE" else "GROUP · ${event.groupName}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
             Text(event.title, style = MaterialTheme.typography.titleLarge)
-            Text("${formatTime(event.startMillis, event.timezone)} · ${event.timezone}")
+            Text("${formatTime(preview?.nextStart ?: event.startMillis, event.timezone)} · ${event.timezone}")
+            if (event.rrule.isNotBlank()) Text("Repeats · ${event.rrule}", style = MaterialTheme.typography.bodySmall)
             if (event.description.isNotBlank()) Text(event.description)
             Text(when {
-                !EventTime.supportsReminder(event.rrule, event.allDay) -> "${if (event.rrule.isNotBlank()) "Recurring" else "All-day"} · reminder scheduling not yet available"
+                preview?.problem != null -> "Not scheduled: ${preview.problem}"
                 !event.enabled -> "Reminder disabled"
-                EventTime.reminderAt(event.startMillis, event.reminderMinutes) <= System.currentTimeMillis() -> "Reminder time has passed"
+                preview?.nextStart == null -> "No upcoming reminder"
                 else -> "Remind ${event.reminderMinutes} minutes before · subject to permissions above"
             }, style = MaterialTheme.typography.bodySmall)
         }

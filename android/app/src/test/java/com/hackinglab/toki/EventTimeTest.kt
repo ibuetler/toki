@@ -14,9 +14,4 @@ class EventTimeTest {
         assertEquals(Instant.parse("2026-10-25T23:57:00Z").toEpochMilli(), EventTime.reminderAt(start, 5))
         assertEquals(start, EventTime.reminderAt(start, 0))
     }
-    @Test fun unsupportedRecurrenceNeverSchedulesAsOneOff() {
-        assertTrue(EventTime.supportsReminder("", false))
-        assertFalse(EventTime.supportsReminder("FREQ=YEARLY", false))
-        assertFalse(EventTime.supportsReminder("", true))
-    }
 }

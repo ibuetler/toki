@@ -14,7 +14,6 @@ class ApiFailure(val status: Int) : Exception(
 object EventTime {
     fun parse(value: String): Long = Instant.parse(value.replace(' ', 'T')).toEpochMilli()
     fun reminderAt(start: Long, minutes: Int): Long = Math.subtractExact(start, minutes.toLong() * 60_000)
-    fun supportsReminder(rrule: String, allDay: Boolean): Boolean = rrule.isBlank() && !allDay
 }
 
 class PocketBase {
@@ -60,6 +59,14 @@ class PocketBase {
         } while (page <= pages)
         return records
     }
+    private fun dates(json: JSONObject, field: String): String {
+        if (json.isNull(field)) return ""
+        val array = json.getJSONArray(field)
+        require(array.length() <= 1000)
+        return (0 until array.length()).joinToString("\n") {
+            array.getString(it).also { value -> require(!value.contains('\n') && !value.contains('\r')) }
+        }
+    }
     fun deadlines(session: Session): List<Deadline> {
         val groups = all("groups", session.token).associate { it.getString("id") to it.getString("name") }
         val preferences = all("deadline_preferences", session.token)
@@ -73,6 +80,9 @@ class PocketBase {
                 groupName = groups[json.optString("group")] ?: ""
                 timezone = json.getString("timezone")
                 rrule = json.optString("rrule")
+                exdates = dates(json, "exdates")
+                rdates = dates(json, "rdates")
+                recurrenceLoaded = true
                 allDay = json.optBoolean("all_day")
                 startMillis = EventTime.parse(json.getString("start_at"))
                 reminderMinutes = (preference?.getInt("reminder_minutes") ?: json.getInt("reminder_minutes"))

@@ -31,12 +31,14 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
+    sourceSets.getByName("test").resources.srcDir("../../backend/fixtures")
     buildFeatures {
         compose = true
     }
 }
 
 dependencies {
+    implementation("org.dmfs:lib-recur:0.17.1")
     implementation("androidx.room:room-runtime:2.8.4")
     annotationProcessor("androidx.room:room-compiler:2.8.4")
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.11.0")

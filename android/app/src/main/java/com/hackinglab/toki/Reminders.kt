@@ -10,7 +10,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.hackinglab.toki.data.Deadline
-import com.hackinglab.toki.data.EventTime
+import com.hackinglab.toki.data.OccurrencePlanner
 
 class Reminders(private val context: Context) {
     private val alarms = context.getSystemService(AlarmManager::class.java)
@@ -54,21 +54,44 @@ class Reminders(private val context: Context) {
     fun rebuild(records: List<Deadline>): Int {
         val old = prefs.getStringSet("ids", emptySet())!!.toSet()
         old.forEach { alarms.cancel(pending(it)) }
-        val scheduled = mutableSetOf<String>()
-        if (ready()) {
-            records.filter { it.enabled && EventTime.supportsReminder(it.rrule, it.allDay) }.forEach {
-                val at = EventTime.reminderAt(it.startMillis, it.reminderMinutes)
-                if (at > System.currentTimeMillis()) {
-                    try { set(it.id, at); scheduled += it.id } catch (_: SecurityException) { /* Permission changed. */ }
-                }
-            }
+        val reset = prefs.edit().putStringSet("ids", emptySet())
+        old.forEach { reset.remove("occurrence:$it").remove("trigger:$it") }
+        reset.commit()
+        var count = 0
+        if (ready()) records.filter { it.enabled && !it.allDay }.forEach {
+            if (scheduleNext(it)) count++
         }
-        prefs.edit().putStringSet("ids", scheduled).commit()
         val testAt = prefs.getLong("testAt", 0)
         if (testAt > System.currentTimeMillis() && ready()) {
             try { set(TEST, testAt) } catch (_: SecurityException) { }
         }
-        return scheduled.size
+        return count
+    }
+    fun scheduleNext(event: Deadline): Boolean {
+        alarms.cancel(pending(event.id))
+        val ids = prefs.getStringSet("ids", emptySet())!!.toMutableSet().apply { remove(event.id) }
+        val edit = prefs.edit().remove("occurrence:${event.id}").remove("trigger:${event.id}")
+        var scheduled = false
+        if (event.enabled && !event.allDay && ready()) {
+            try {
+                val next = OccurrencePlanner.next(event, System.currentTimeMillis())
+                if (next != null) {
+                    set(event.id, next.reminderMillis)
+                    edit.putLong("occurrence:${event.id}", next.startMillis).putLong("trigger:${event.id}", next.reminderMillis)
+                    ids += event.id
+                    scheduled = true
+                }
+            } catch (_: Exception) { /* Invalid rule is surfaced per event in the UI. */ }
+        }
+        edit.putStringSet("ids", ids).commit()
+        return scheduled
+    }
+    fun consumeOccurrence(id: String): Long? {
+        val trigger = prefs.getLong("trigger:$id", 0)
+        if (trigger == 0L || System.currentTimeMillis() < trigger) return null
+        val occurrence = prefs.getLong("occurrence:$id", 0)
+        prefs.edit().remove("trigger:$id").remove("occurrence:$id").commit()
+        return occurrence.takeIf { System.currentTimeMillis() - trigger <= 600_000 }
     }
     fun test(): Long {
         check(ready()) { "Allow notifications and exact alarms first." }
@@ -115,9 +138,13 @@ class ReminderReceiver : BroadcastReceiver() {
                         if (app.reminders.consumeTest()) app.reminders.show(id, "TOKI test reminder", "Your phone can play TOKI reminders while the app is closed.")
                     } else if (app.sessions.load() != null) {
                         val event = app.database.deadlines().find(id)
-                        if (event != null && event.enabled && EventTime.supportsReminder(event.rrule, event.allDay)) {
-                            val delta = System.currentTimeMillis() - EventTime.reminderAt(event.startMillis, event.reminderMinutes)
-                            if (delta in 0..600_000) app.reminders.show(id, event.title, "Starts in ${event.reminderMinutes} minutes")
+                        val occurrence = app.reminders.consumeOccurrence(id)
+                        if (event != null) {
+                            if (event.enabled && !event.allDay && occurrence != null) {
+                                app.reminders.show(id, event.title, "Starts in ${event.reminderMinutes} minutes")
+                            }
+                            // Advance only this event so simultaneous alarms retain their triggers.
+                            app.reminders.scheduleNext(event)
                         }
                     }
                 }
