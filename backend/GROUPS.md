@@ -68,3 +68,23 @@ Validation on October 20, 2026: **162 private regression checks and 114 group ch
 5. If rollback is required, restore the verified pre-migration backup with the corresponding application version while stopped. Do not erase group relations to simulate rollback.
 
 Deployment to Jupiter requires a separate rollout action. These local tests did not modify the real server or send SMTP mail.
+
+## Rehearse the migration over SSH on Jupiter
+
+From your local repository:
+
+```sh
+./backend/scripts/test-jupiter-migration.sh --host jupiter
+# If your SSH configuration requires an explicit user:
+./backend/scripts/test-jupiter-migration.sh --host root@jupiter
+```
+
+Defaults are container `pocketbase` and host data directory `/opt/applic/pocketbase/pb_data`. Override them with `--container` and `--data-dir`. The script verifies that the directory matches the container's actual `/pb/pb_data` bind mount. Paths with spaces are not supported.
+
+The SSH user needs key-based login, Docker access, Python 3 with SQLite support, and read access to `pb_data`. Use a configured SSH host alias for a custom port or identity file. No passwords or database contents are printed or downloaded to your local machine.
+
+The script uploads only the migration and a worker script, takes a consistent database snapshot through SQLite's backup API, and checks snapshot integrity. It uses the exact running container image and requires PocketBase 0.40.5. The migration runs in a temporary container with networking disabled, without serving HTTP, mounting production data, or stopping the live service. It checks integrity again, compares all original application records, confirms the new group collections/rules exist, and verifies all original deadlines remain private. The temporary snapshot, migration result, and container are removed on normal exit or handled failure. If SSH is interrupted or the host crashes, inspect `/tmp/toki-migration-test.*` and `toki-migration-test-*` containers for leftovers; they can contain sensitive database copies.
+
+A successful run exits zero and ends with `Migration rehearsal passed`. It does **not** deploy the migration, test SMTP, or exercise REST authorization. Use the separate group integration suite for API coverage. It refuses a database where group collections already exist rather than claiming to test the migration twice.
+
+The SSH transport was simulated locally for verification; the full backup/migration/comparison flow ran against the copied pre-group database with real Docker and preserved its two users and one deadline. Actual SSH connectivity, remote permissions, and dependencies on Jupiter remain to be checked by running the command above.
