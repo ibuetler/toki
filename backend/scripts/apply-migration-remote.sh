@@ -54,6 +54,7 @@ tar -C "$work/restore-check" -xzf "$backup/pb_data.tar.gz"
 python3 "$work/deployment_checks.py" backup "$work/restore-check"
 mkdir -p "$app/pb_migrations"
 cp "$work/$migration" "$app/pb_migrations/$migration"
+python3 "$work/deployment_checks.py" permissions "$app"
 if [[ "$(cat "$work/needs_override")" == yes ]]; then
   case "$(basename "$(cat "$work/base")")" in
     docker-compose.*) override="$app/docker-compose.override.yml" ;;

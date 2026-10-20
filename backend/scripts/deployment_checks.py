@@ -1,5 +1,6 @@
 """Internal deployment checks. Never prints records, settings, or credentials."""
 import json
+import os
 import pathlib
 import sqlite3
 import subprocess
@@ -65,6 +66,19 @@ def preflight(container, app, work):
     print('Preflight passed: Compose, image, source data, and migration filename match.')
 
 
+def prepare_permissions(app):
+    app = pathlib.Path(app)
+    owner = (app / 'pb_data').stat()
+    directory = app / 'pb_migrations'
+    migration = directory / '1792454401_group_events.js'
+    # Mirror the working data directory's host UID/GID, including userns remapping.
+    # Do not change ownership of data, backups, or unrelated migration files.
+    for path, mode in [(directory, 0o700), (migration, 0o600)]:
+        os.chown(path, owner.st_uid, owner.st_gid)
+        os.chmod(path, mode)
+    print(f'Migration ownership matches pb_data ({owner.st_uid}:{owner.st_gid}).')
+
+
 def check_backup(restore):
     restore = pathlib.Path(restore)
     for name in ['data.db', 'auxiliary.db']:
@@ -119,4 +133,4 @@ def verify(container, app, restore):
 
 
 if __name__ == '__main__':
-    {'preflight': preflight, 'backup': check_backup, 'verify': verify}[sys.argv[1]](*sys.argv[2:])
+    {'preflight': preflight, 'backup': check_backup, 'verify': verify, 'permissions': prepare_permissions}[sys.argv[1]](*sys.argv[2:])

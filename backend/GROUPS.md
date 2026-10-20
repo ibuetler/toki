@@ -115,3 +115,21 @@ If backup or preparation fails before migration is attempted, the original conta
 The script checks database preservation and health without creating production accounts or events. You can subsequently run `backend/pocketbase-tests/testing.py -all` from your configured Python environment for the normal two-user API regression. The disposable `group_tests.py` runner remains restricted to local test instances.
 
 The complete deployment was verified against a disposable local backend using real Docker and simulated SSH. Injected backup failure restarted the original service; injected post-migration verification failure stopped it and retained the backup. Jupiter deployment is performed only when you run the command above.
+
+### Docker user namespace remapping
+
+With `userns-remap`, container root is a different host UID. The rollout now matches the new migration directory and file ownership to the working `pb_data` directory, keeping directory mode 0700 and file mode 0600. The original script omitted this step, which can prevent startup when the root-owned migration directory is bind-mounted.
+
+If that original rollout failed on Jupiter, inspect `docker logs --tail 60 pocketbase` for permission errors. On the host, correct ownership without changing the data or backup, then start the existing container:
+
+```sh
+cd /opt/applic/pocketbase
+chown --reference=pb_data pb_migrations pb_migrations/1792454401_group_events.js
+chmod 700 pb_migrations
+chmod 600 pb_migrations/1792454401_group_events.js
+docker start pocketbase
+docker logs --tail 60 pocketbase
+docker exec pocketbase wget -q -O - http://127.0.0.1:8090/api/health
+```
+
+The failed rollout already installed the persistent mount. Starting that container retries any unapplied migration; do not rerun the deployment wrapper against a partially applied schema. Keep the printed backup until health, collections, and API checks pass.
