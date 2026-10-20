@@ -30,6 +30,7 @@ import androidx.lifecycle.ViewModelProvider
 import com.hackinglab.toki.data.Deadline
 import com.hackinglab.toki.data.EventTime
 import com.hackinglab.toki.ui.theme.TOKITheme
+import kotlinx.coroutines.delay
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -68,6 +69,11 @@ class MainActivity : ComponentActivity() {
 private fun TokiScreen(state: TokiState, model: TokiViewModel, onNotifications: () -> Unit, onExact: () -> Unit, onFullScreen: () -> Unit) {
     var email by rememberSaveable { mutableStateOf("") }
     var password by remember { mutableStateOf("") } // Never saved to disk or instance state.
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(state.testAt) {
+        now = System.currentTimeMillis()
+        while (state.testAt > now) { delay(250); now = System.currentTimeMillis() }
+    }
     Scaffold { insets ->
         LazyColumn(Modifier.fillMaxSize().padding(insets), contentPadding = PaddingValues(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             item {
@@ -119,7 +125,12 @@ private fun TokiScreen(state: TokiState, model: TokiViewModel, onNotifications: 
                         if (!state.exactAllowed) OutlinedButton(onClick = onExact, enabled = !state.busy) { Text("Allow exact alarms") }
                         if (!state.fullScreenAllowed) OutlinedButton(onClick = onFullScreen, enabled = !state.busy) { Text("Allow lock-screen alarms") }
                         if (state.notificationsAllowed && state.exactAllowed) Text("Permissions ready", color = MaterialTheme.colorScheme.primary)
-                        OutlinedButton(onClick = model::testReminder, enabled = !state.busy && state.notificationsAllowed && state.exactAllowed) { Text("Test alarm in 30 seconds") }
+                        OutlinedButton(onClick = model::testReminder, enabled = !state.busy && state.notificationsAllowed && state.exactAllowed && state.testAt <= now) { Text("Test alarm in 30 seconds") }
+                        if (state.testAt > now) {
+                            val clock = DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.systemDefault()).format(Instant.ofEpochMilli(state.testAt))
+                            Text("Alarm at $clock · ${(state.testAt - now + 999) / 1000} seconds remaining")
+                        }
+                        if (state.testDelay >= 0) Text("Last test delivered ${"%.1f".format(state.testDelay / 1000.0)} seconds after target", style = MaterialTheme.typography.bodySmall)
                         Text("Sound uses alarm volume and respects Do Not Disturb. Lock-screen display needs the extra permission above.", style = MaterialTheme.typography.bodySmall)
                     }
                 }

@@ -35,7 +35,15 @@ class Reminders(private val context: Context) {
     private fun pending(id: String): PendingIntent = PendingIntent.getBroadcast(context, 0,
         Intent(context, ReminderReceiver::class.java).setData(Uri.Builder().scheme("toki").authority("reminder").appendPath(id).build()),
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-    private fun set(id: String, time: Long) { alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, time, pending(id)) }
+    private fun set(id: String, time: Long) {
+        // These are visible, user-requested alarms. Allow-while-idle alarms can
+        // throttle closely spaced reminders; alarm-clock delivery avoids that path.
+        val show = PendingIntent.getActivity(context, 0, Intent(context, MainActivity::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        alarms.setAlarmClock(AlarmManager.AlarmClockInfo(time, show), pending(id))
+    }
+    fun pendingTestAt(): Long = prefs.getLong("testAt", 0)
+    fun lastTestDelay(): Long = prefs.getLong("testDelay", -1)
     fun cancelAll() {
         context.stopService(Intent(context, AlarmService::class.java))
         prefs.getStringSet("ids", emptySet())!!.forEach { alarms.cancel(pending(it)) }
@@ -62,16 +70,23 @@ class Reminders(private val context: Context) {
         }
         return scheduled.size
     }
-    fun test() {
+    fun test(): Long {
         check(ready()) { "Allow notifications and exact alarms first." }
         val at = System.currentTimeMillis() + 30_000
-        set(TEST, at)
-        prefs.edit().putLong("testAt", at).commit()
+        check(prefs.edit().putLong("testAt", at).remove("testDelay").commit())
+        try { set(TEST, at) } catch (error: Exception) {
+            prefs.edit().remove("testAt").commit()
+            throw error
+        }
+        android.util.Log.i("TokiAlarmTiming", "Test scheduled: targetMillis=$at")
+        return at
     }
     fun consumeTest(): Boolean {
         val at = prefs.getLong("testAt", 0)
         if (at == 0L || System.currentTimeMillis() < at || System.currentTimeMillis() - at > 600_000) return false
-        prefs.edit().remove("testAt").commit()
+        val delay = System.currentTimeMillis() - at
+        prefs.edit().remove("testAt").putLong("testDelay", delay).commit()
+        android.util.Log.i("TokiAlarmTiming", "Test delivered: latenessMillis=$delay")
         return true
     }
     fun show(id: String, title: String, message: String) {

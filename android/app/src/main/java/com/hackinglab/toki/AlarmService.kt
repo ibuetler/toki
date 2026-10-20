@@ -21,6 +21,7 @@ class AlarmService : Service() {
         val ringing = mutable.asStateFlow()
     }
     private var player: MediaPlayer? = null
+    private var isTest = false
     private var wakeLock: PowerManager.WakeLock? = null
     private val handler = Handler(Looper.getMainLooper())
     private val timeout = Runnable { stopSelf() }
@@ -30,6 +31,7 @@ class AlarmService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
+        isTest = intent.getStringExtra("id") == Reminders.TEST
         val title = intent.getStringExtra("title") ?: "TOKI reminder"
         val message = intent.getStringExtra("message") ?: "An event is coming up."
         val reminders = Reminders(this)
@@ -69,7 +71,10 @@ class AlarmService : Service() {
                     .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
                 setDataSource(this@AlarmService, sound)
                 isLooping = true
-                setOnPreparedListener { it.start() }
+                setOnPreparedListener {
+                    it.start()
+                    if (isTest) android.util.Log.i("TokiAlarmTiming", "Test audio started: nowMillis=${System.currentTimeMillis()}")
+                }
                 setOnErrorListener { _, _, _ -> stopSelf(); true }
                 prepareAsync()
             }
