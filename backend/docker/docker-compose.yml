@@ -1,0 +1,31 @@
+services:
+
+  pocketbase:
+    build: .
+    image: hackinglab/pocketbase:latest
+    container_name: pocketbase
+    restart: always
+
+    labels:
+      - "traefik.enable=true"
+
+      # HTTP Router
+      - "traefik.http.routers.pocketbase.entrypoints=websecure"
+      - "traefik.http.routers.pocketbase.rule=Host(`pocketbase.hacking-lab.com`)"
+
+      # HTTP Service
+      - "traefik.http.routers.pocketbase.service=pocketbase"
+      - "traefik.http.services.pocketbase.loadbalancer.server.port=8090"
+
+      # Docker Network
+      - "traefik.docker.network=transit"
+
+    volumes:
+      - ./pb_data:/pb/pb_data
+
+    networks:
+      transit:
+
+networks:
+  transit:
+    external: true

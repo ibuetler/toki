@@ -9,7 +9,7 @@ The project follows the [initial design and backend setup discussion](https://ch
 - A remote PocketBase backend has been configured at `https://pocketbase.hacking-lab.com`.
 - This repository contains Python authorization and recurrence regression tests. The latest full run returned **54 PASS, 0 FAIL**, including deletion of all four temporary records.
 - Android development has not started; `android/` is empty.
-- Backend deployment files, collection migrations, and API rules are not yet included. The tests require an already configured PocketBase instance.
+- Captured Docker deployment files, collection schema, access rules, and a fresh-instance migration are included. See the [backend guide](backend/README.md) for the verified local setup and remaining operational configuration.
 
 ## Planned architecture
 
@@ -125,7 +125,7 @@ The local recurrence checks do not validate Android recurrence calculation or re
 
 ## Next steps
 
-1. Capture the actual PocketBase schema, access rules, pinned version, and deployment configuration using the [backend capture guide](backend/README.md).
+1. Complete SMTP/server-settings documentation and verify backup restoration using the [backend guide](backend/README.md).
 2. Validate a fresh backend installation with the strengthened regression suite.
 3. Define shared recurrence fixtures and semantics for time zones, birthdays, all-day events, exclusions, and additions.
 4. Implement Android authentication, synchronization, local persistence, recurrence calculation, and alarms.

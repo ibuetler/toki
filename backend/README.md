@@ -1,40 +1,51 @@
 # PocketBase backend
 
-The configured remote endpoint is `https://pocketbase.hacking-lab.com`. The regression suite verifies normal user access; it does not export server configuration or authenticate as a superuser.
+## Captured configuration
 
-## Deployment capture: pending
+The files in `docker/Dockerfile` and `docker/docker-compose.yml` were copied from Jupiter. The Dockerfile defaults to PocketBase **0.40.5**, with Alpine 3.22 and amd64/arm64 support. This identifies the build configuration, not an independently inspected running Jupiter binary or image digest. Compose uses Traefik's external `transit` network, the `websecure` entrypoint, and `pocketbase.hacking-lab.com`, forwarding to port 8090.
 
-The discussion describes a Docker deployment on Jupiter under `/opt/applic/pocketbase`, behind Traefik on its external `transit` network, with HTTPS and authenticated SMTP. The exact running version, image build, collection schema, and deployment files have not yet been captured in this repository. Do not treat this document as a deployable configuration.
+`schema/collections.json` contains the `users` and `deadlines` collection definitions extracted read-only from the supplied local database copy. `pb_migrations/1792454400_toki_schema.js` imports the same definitions using PocketBase's migration API. It preserves collection IDs, fields, indexes, access rules, password-auth configuration, and authentication feature enablement. It excludes records, server settings, token signing secrets, OAuth provider credentials, email templates, and custom token lifetimes; omitted settings use PocketBase defaults. This is a reproducible application schema, not a complete server backup.
 
-Copy the following non-secret artifacts from that deployment into this directory:
+The copied `docker/pb_data/` remains ignored by Git. `.dockerignore` also excludes it from image build contexts. Never commit database files, backups, real environment files, account records, or SMTP credentials.
 
-| Artifact | Target path | What to capture |
-| --- | --- | --- |
-| Docker configuration | `deployment/compose.yaml`, `deployment/Dockerfile` | Actual service, build, volumes, network, Traefik labels, and runtime user settings; replace secrets with environment references |
-| Environment template | `deployment/.env.example` | Required variable names and safe examples only |
-| Version information | `deployment/VERSION.md` | Running PocketBase version, image tag/digest, target architecture, and build arguments |
-| Collection export | `schema/collections.json` | Export from the deployed admin UI, including field constraints, indexes, relations, auth configuration, and API rules; inspect for secrets before committing |
-| Existing migrations/hooks | `pb_migrations/`, `pb_hooks/` | Existing server sources if present; review for embedded secrets |
+## Validate a fresh local instance
 
-Keep `pb_data`, backups, account records, real environment files, SMTP credentials, and tokens out of Git. Collection exports and migrations must also be inspected for embedded credentials or seed records.
+Run from the repository root. Docker must be running. The local Compose file uses a separate named volume, localhost port 8090, and no Traefik configuration or production data mount.
 
-Once the files are available:
+```sh
+docker compose -p toki-validation -f backend/docker/compose.local.yaml build
+docker compose -p toki-validation -f backend/docker/compose.local.yaml create
+docker cp backend/pb_migrations toki-validation-pocketbase-1:/pb/pb_migrations
+docker compose -p toki-validation -f backend/docker/compose.local.yaml start
+```
 
-1. Pin the build to the deployed version rather than assuming the newest release is compatible.
-2. Convert or preserve the schema as migrations appropriate to that version.
-3. Start a separate instance with an empty data directory and apply the migrations.
-4. Provision two disposable users locally, configure the regression suite for that instance, and run `testing.py -all`.
-5. Document the verified setup, backup/restore procedure, and upgrade process. Do not import a schema into the running server just to test reproducibility.
+Migrations run automatically when PocketBase starts. Copying them into the stopped container avoids requiring Docker host directory sharing. Repeat the copy step if the container is recreated. Open `http://127.0.0.1:8090/_/` to provision a local superuser and two disposable users. Configure a separate ignored test configuration with the local endpoint and those users, then run:
 
-## Access contract
+```sh
+cd backend/pocketbase-tests
+python testing.py -all -config config.local.ini
+```
 
-The intended `deadlines` behavior is:
+On October 20, 2026, a fresh local arm64 build successfully applied this migration and passed **54 checks with 0 failures**, using two disposable users. All four temporary deadlines were deleted. SMTP, delivery of email, Traefik routing, and amd64 execution were not tested.
 
-- Authenticated owners can list, view, update, and delete their records.
-- Creation requires the submitted owner to match the authenticated user.
-- Updating a record cannot change its owner.
-- Cross-user requests and anonymous clients cannot access deadline records.
+Stop the validation instance when finished:
 
-The deployed rule expressions still need to be exported. Passing API tests confirms tested behavior, not the complete rule definitions. PocketBase can return HTTP 200 with an empty list when a list rule filters out all records; anonymous list tests therefore check that the known record is absent rather than requiring an error status.
+```sh
+docker compose -p toki-validation -f backend/docker/compose.local.yaml down
+```
 
-References: [PocketBase API rules](https://pocketbase.io/docs/api-rules-and-filters/) and [deployment guidance](https://pocketbase.io/docs/going-to-production/).
+The named volume is retained for inspection. Use a new project name and adjust the container name in the copy command when validating another empty installation.
+
+## Access rules
+
+- `users`: users can list/view only themselves; create/update/delete are superuser-only.
+- `deadlines`: list/view/delete require ownership; creation requires an authenticated matching owner; updates require ownership and an unchanged owner.
+- Anonymous list queries return an empty list under the captured rules, which is a valid denial of record access.
+
+## Deployment and operations
+
+The copied production Compose file does not include a migration mount. Before deploying a fresh server, arrange for the captured migrations to be present in `/pb/pb_migrations` before startup. Review migrations against backups before applying them to an existing instance. Do not run the local validation configuration against Jupiter's data.
+
+SMTP credentials, server settings, the exact running image digest, backup scheduling, and a tested restore procedure still need to be captured separately. Keep backup archives outside Git; verify restoration in a separate environment before upgrades. The supplied database copy includes WAL files and should not be treated as a verified restorable backup.
+
+References: [PocketBase migrations](https://pocketbase.io/docs/js-migrations/), [API rules](https://pocketbase.io/docs/api-rules-and-filters/), and [deployment guidance](https://pocketbase.io/docs/going-to-production/).

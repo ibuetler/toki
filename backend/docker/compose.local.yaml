@@ -1,0 +1,10 @@
+# Isolated validation instance; no Traefik or production data mount.
+services:
+  pocketbase:
+    build: .
+    ports:
+      - "127.0.0.1:8090:8090"
+    volumes:
+      - toki_validation:/pb/pb_data
+volumes:
+  toki_validation:
