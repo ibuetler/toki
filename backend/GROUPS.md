@@ -1,6 +1,6 @@
 # Group events
 
-Group sharing is implemented by migration `1792454401_group_events.js`. It is tested locally and has **not been deployed to Jupiter**. The baseline migration remains unchanged. `schema/collections.json` describes the combined target schema.
+Group sharing is implemented by migration `1792454401_group_events.js`. It is deployed to Jupiter; the live two-user group regression passed on October 20, 2026. The baseline migration remains unchanged. `schema/collections.json` describes the combined target schema.
 
 ## Data and permissions
 
@@ -133,3 +133,18 @@ docker exec pocketbase wget -q -O - http://127.0.0.1:8090/api/health
 ```
 
 The failed rollout already installed the persistent mount. Starting that container retries any unapplied migration; do not rerun the deployment wrapper against a partially applied schema. Keep the printed backup until health, collections, and API checks pass.
+
+
+## Live group regression with existing users
+
+Run from `backend/pocketbase-tests` in the configured Python environment:
+
+```sh
+python3 group_live_tests.py --users ivan marina
+```
+
+This uses the ignored `config.ini` and two existing user accounts. It requires no SSH, Docker, superuser token, or account provisioning. It creates temporary groups, membership, disabled recurring/private events, and personal reminder preferences; all mutations target records created by that run. Cleanup attempts both configured actors and accepts records already removed by deletion cascades. Failures report record IDs requiring manual cleanup. Normal account authentication may trigger the backend's configured login alerts.
+
+The checks exercise outsider and anonymous denial, member reads, blocked edits/self-promotion, independent reminder preferences, admin promotion and edits, immutable ownership/group links, membership revocation, and group deletion cascades. The runner uses both roles sequentially; the four-user disposable suite remains useful for broader simultaneous-role coverage and superuser schema inspection.
+
+On October 20, 2026, the live Jupiter run completed with **75 PASS, 0 FAIL**, including eight cleanup checks. Existing user records, memberships, and events were not edited by the test flow.
