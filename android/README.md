@@ -2,11 +2,13 @@
 
 Kotlin/Compose app for `https://pocketbase.hacking-lab.com`, package `com.hackinglab.toki`, minimum Android 8 (API 26).
 
+Read the [illustrated Android user guide](../docs/ANDROID_GUIDE.md) for screenshots of Events, Birthdays, Tasks, search, creation forms, alarm setup and back-to-top navigation.
+
 ## Implemented
 
 - Email/password sign-in with PocketBase user authentication (no superuser credentials).
 - Passwords are never saved. Session tokens are encrypted with an Android Keystore AES-GCM key; app data is excluded from cloud backup/device transfer.
-- Manual sync fetches every page of accessible groups, deadlines, and personal reminder preferences. The session is refreshed first. A complete snapshot replaces Room data in one transaction; a failed fetch keeps the previous snapshot.
+- Manual sync fetches every page of accessible groups, deadlines, personal reminder preferences, birthdays and tasks. The session is refreshed first. A complete snapshot replaces Room data in one transaction; a failed fetch keeps the previous snapshot.
 - Private/group labels, phone-local timestamps (saved event-zone time is also shown in expanded details when different), and effective per-user reminder settings. Revoked/deleted records disappear on the next successful sync and their scheduled alarms are cancelled.
 - Timed one-off and recurring events use Android alarm-clock scheduling (visible in the system next-alarm indicator) and start a foreground alarm player using the alarm audio stream. Sound loops until dismissed, with a two-minute timeout. User-granted notification and exact-alarm access are required. Permission status and the next alarm are visible in the app.
 - Cached reminders are restored after reboot (after unlock), app update, clock/time-zone changes, and granting exact-alarm access. Signing out clears cache, token, notifications, and scheduled reminders.
@@ -58,7 +60,7 @@ Display times follow the phone’s current time zone. Existing timed deadlines r
 
 RRULE expansion uses `org.dmfs:lib-recur:0.17.1` with strict RFC 5545 parsing. Supported frequencies are DAILY, WEEKLY, MONTHLY, and YEARLY, with standard BY* selectors, INTERVAL, COUNT, and UNTIL. Multiple BYHOUR/BYMINUTE/BYSECOND values, sub-daily frequencies, non-Gregorian rules, and COUNT above 10000 are rejected with a visible per-event explanation. Recurring DTSTART values must have whole-second precision.
 
-The recurrence set is DTSTART plus RRULE plus RDATE, minus EXDATE; duplicates collapse. The backend's `exdates`/`rdates` JSON arrays are cached. ISO strings without an offset use the event's IANA zone; Z/offset timestamps are absolute. Exceptions match occurrence instants. Nonexistent DST wall times are skipped without counting toward COUNT; overlaps use the first (earlier) offset and ring once. February 29 birthdays recur only in leap years unless a different RRULE is provided. Month-day 31 skips months without that date.
+The recurrence set is DTSTART plus RRULE plus RDATE, minus EXDATE; duplicates collapse. The backend's `exdates`/`rdates` JSON arrays are cached. ISO strings without an offset use the event's IANA zone; Z/offset timestamps are absolute. Exceptions match occurrence instants. Nonexistent DST wall times are skipped without counting toward COUNT; overlaps use the first (earlier) offset and ring once. A generic deadline with a February 29 RRULE recurs only in leap years unless its rule says otherwise. The dedicated Birthday type instead uses its February 28/March 1 policy in non-leap years. Month-day 31 skips months without that date.
 
 Only the next occurrence whose reminder is still in the future is registered per event. After delivery, only that event advances to its next occurrence, without network access; simultaneous events retain their own alarms. Sync, reboot, app update, and clock changes also rebuild schedules. Missed reminder times are not replayed on an ordinary sync. Invalid rules affect only their event, not the entire local schedule.
 
@@ -74,23 +76,21 @@ python backend/pocketbase-tests/recurrence_fixtures.py
 
 Generic all-day deadlines can be inspected under **All** but are **not scheduled** until an all-day reminder-time policy is defined. The birthday type has its own explicit local reminder time and is scheduled. The APK creates private timed events; creating group events, managing memberships, and changing personal reminder preferences remain in PocketBase.
 
-Sync runs on sign-in, after event creation, or explicitly through refresh/**Sync now**. There is no periodic background sync yet. Offline devices retain their last known access until the next successful sync. Exact-alarm availability, notification/channel settings, DND, alarm volume, OEM background restrictions, and force-stop behavior affect delivery. Alarm audio uses the alarm stream rather than the notification stream. The lock-screen Dismiss screen uses a full-screen intent with user-controlled access; without that access, tap the alarm notification or its Dismiss action. Alarm volume and DND still apply. Overlapping alarms share one player and Dismiss control, with the latest title shown.
+Sync runs on sign-in, after event/birthday creation or editing, or explicitly through refresh/**Sync now**. Successful task writes update their cached records directly and rebuild reminders. There is no periodic background sync yet. Offline devices retain their last known access until the next successful sync. Exact-alarm availability, notification/channel settings, DND, alarm volume, OEM background restrictions, and force-stop behavior affect delivery. Alarm audio uses the alarm stream rather than the notification stream. The lock-screen Dismiss screen uses a full-screen intent with user-controlled access; without that access, tap the alarm notification or its Dismiss action. Alarm volume and DND still apply. Overlapping alarms share one player and Dismiss control, with the latest title shown.
 
 ## Build and verify
 
-Latest feature verification on October 21, 2026: **31 unit tests, eleven navigation/form UI tests, and three cache/migration checks passed** on the connected Android 16 phone. Build and lint passed. A temporary creation payload was accepted and read back from the live backend, then that exact test record was deleted. These checks do not replace audible alarm, offline, or reboot testing.
+Documentation verification on **21 October 2026**: **45 unit tests and 21 navigation/form UI checks passed**, together with the separate ten-screen capture fixture. Build and lint passed. Screenshots use fictional in-memory data; these checks do not establish audible delivery, offline delivery or reboot behaviour. Earlier API/cache/migration checks are described in the backend guides and device test sources.
 
 Use Android Studio's configured JDK/SDK and the committed Gradle wrapper:
 
 ```sh
 cd android
 ./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
-./gradlew :app:connectedDebugAndroidTest
-# Device tests can uninstall their APKs afterward. Install the interactive app last:
 ./gradlew :app:installDebug
 ```
 
-To run only the navigation/form checks while preserving a signed-in app, keep the phone unlocked with its screen on and use the SDK’s `adb`:
+To run the navigation/form checks while preserving a signed-in app, keep the phone unlocked with its screen on and use the SDK’s `adb`:
 
 ```sh
 cd android
@@ -102,8 +102,10 @@ adb shell am instrument -w -e class com.hackinglab.toki.TokiNavigationTest \
 
 This uses synthetic events and callbacks; it does not authenticate or create backend records. It avoids the connected-test task’s uninstall cleanup. Reopen TOKI afterward to resume the interactive app and recheck alarms. Never uninstall or clear app storage to preserve sign-in and cached data.
 
+For the reproducible documentation capture and image export commands, see [screenshots](../docs/screenshots/README.md).
+
 Room uses Java entities/DAO and the Room Java annotation processor, avoiding a separate Kotlin code-generation plugin with AGP's built-in Kotlin support.
 
-Unit tests cover task priority sorting, reminder opt-in, completion and one-off delivery, partial edit payloads, birthday edits, preservation of unchanged timestamps and advanced fields, private/group deletion permission hints, phone-zone defaults, explicit zone conversion, deadline visibility after reminders, UTC timestamps, reminder offsets, shared recurrence fixtures, DST gaps/overlaps, finite schedules, malformed data, migration safeguards, and offline advancement. Phone tests cover task capture/editing, completion/reopening, task priority order, task API payloads and missing-backend capability, Room replacement, encrypted session round-trip/clear, TLS health connectivity to PocketBase, Compose screen rendering, toolbar search/reset, chronological summary tiles, event creation defaults/submission, edit prefilling/custom recurrence/cancellation, edit action permissions, in-memory PATCH transport checks, compact row expansion, deletion confirmation/cancellation, member-only restrictions, targeted cache deletion, and a separate version-1 cache migration fixture. Tests use isolated storage, make no authenticated backend requests, and do not create backend data. User sign-in and actual audible/offline/reboot behavior need manual phone verification with permissions granted.
+Unit tests cover task priority sorting, reminder opt-in, completion and one-off delivery, partial edit payloads, birthday edits, preservation of unchanged timestamps and advanced fields, private/group deletion permission hints, phone-zone defaults, explicit zone conversion, deadline visibility after reminders, UTC timestamps, reminder offsets, shared recurrence fixtures, DST gaps/overlaps, finite schedules, malformed data, migration safeguards, and offline advancement. Phone tests cover task capture/editing, completion/reopening, task priority order, task API payloads and missing-backend capability, Room replacement, encrypted session round-trip/clear, TLS health connectivity to PocketBase, Compose screen rendering, global offline search across record types, completed/past result navigation, back-to-top in all three lists, chronological summary tiles, event creation defaults/submission, edit prefilling/custom recurrence/cancellation, edit action permissions, in-memory PATCH transport checks, compact row expansion, deletion confirmation/cancellation, member-only restrictions, targeted cache deletion, and a separate version-1 cache migration fixture. Tests use isolated storage, make no authenticated backend requests, and do not create backend data. User sign-in and actual audible/offline/reboot behavior need manual phone verification with permissions granted.
 
 Test diagnostics use the `TokiAlarmTiming` logcat tag (target, delivery, audio-start timestamps only; no event titles or credentials). After returning to the app, the last test delivery delay is shown. Alarm-clock scheduling replaces allow-while-idle scheduling to avoid its closely-spaced-alarm throttling.

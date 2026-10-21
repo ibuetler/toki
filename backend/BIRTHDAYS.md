@@ -18,11 +18,13 @@ PocketBase numeric bounds and access rules reject invalid month/day combinations
 
 ## Android behavior
 
+See the [illustrated Android guide](../docs/ANDROID_GUIDE.md#birthdays) for current app screenshots.
+
 Open **Agenda → Birthdays → + New birthday**. Enter a name and a European birth date, for example `8.10.1968` for 8 October 1968, and choose the reminder time. Use `8.10` if the year is unknown. The date is always parsed as day.month.year, independently of the phone’s language. February 29 exposes an explicit February 28/March 1 choice; February 28 is initially selected. Notes remain collapsed under Add description.
 
 Birthdays have a cake icon and a dedicated Birthdays tab under Your events. A compact Next birthday tile shows the nearest birthday, date, days remaining, and age when known; tapping it selects that tab. Normal deadlines remain in Events and in the blue Next event summary. Birthday reminders still participate in the green Next alarm summary. Today’s birthday remains visible until the next local midnight, even after its reminder. Adding a birthday after today’s reminder time does not ring it late: it remains visible today and the next reminder is scheduled for the following year. Only its next future reminder is scheduled; after delivery it advances offline to next year. Phone time-zone changes rebuild alarms, so 09:00 continues to mean local 09:00. For a chosen reminder in a DST gap, the clock time shifts forward by the size of the gap; an overlap uses the earlier offset once.
 
-Birthday record IDs use a `birthday:` prefix only in the Android cache and alarm identifiers. The raw PocketBase ID is used for the birthdays API. This prevents collisions with deadline IDs. Room version 3 adds birthday metadata without dropping existing cached events; versions 1 and 2 upgrade through the migration chain.
+Birthday record IDs use a `birthday:` prefix only in the Android cache and alarm identifiers. The raw PocketBase ID is used for the birthdays API. This prevents collisions with deadline IDs. Room version 3 added birthday metadata without dropping existing cached events. The current cache is version 4, which also adds tasks; versions 1–3 upgrade through the migration chain.
 
 If the backend does not have the collection yet, normal deadline sync continues, and birthday creation remains disabled with a setup message. After installing the migration, tap refresh once. Read errors other than a missing collection fail sync rather than being mistaken for an empty birthday list.
 

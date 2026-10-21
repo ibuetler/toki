@@ -20,6 +20,8 @@ List/view/create/update/delete rules require authentication and ownership. Updat
 
 ## Android behaviour
 
+See the [illustrated Android guide](../docs/ANDROID_GUIDE.md#tasks) for screenshots of the task list, quick capture and global search.
+
 Open Agenda → Tasks → + New task. Only a title is necessary; priority defaults to Normal. Active tasks sort Urgent → High → Normal → Low, newest first within each priority. Notes and reminders are optional. Reminders use the existing audible alarm and permission system; priority alone never schedules anything. Reminder times are one-off instants displayed in the phone's time zone.
 
 Tasks remain active after their reminder. Checking a task moves it to Completed and cancels its pending alarm on this phone. Reopening restores an alarm only if its reminder is still in the future. A past reminder never repeats. Completed tasks are retained until manually deleted. Deletion requires confirmation. Editing preserves completion status. Task reminders participate in Next alarm; tasks stay separate from Next event and birthday summaries.

@@ -2,29 +2,38 @@
 
 TOKI is a deadline management project with a PocketBase backend and a working Kotlin/Compose Android app. It captures lightweight private tasks and helps users remember meetings and recurring events, such as birthdays, through audible reminders—normally five minutes before an event.
 
-The project follows the [initial design and backend setup discussion](https://chatgpt.com/share/6ad72066-9274-83eb-9568-a003b315f269).
 
 ## Current status
 
 - A remote PocketBase backend has been configured at `https://pocketbase.hacking-lab.com`.
 - This repository contains Python authorization and recurrence regression tests. The two-user remote suite returned **54 PASS, 0 FAIL**, including deletion of all four temporary records. Local group validation also passes the four-user private regression and group authorization checks described below.
 - Group events and personal reminder preferences are deployed to Jupiter; the live group suite passed **75 checks with 0 failures**. See [group events](backend/GROUPS.md).
-- The Android app implements sign-in, offline Room caching, private event creation, permission-aware event deletion, private/group deadline viewing, and timed one-off/recurring audible reminders. Its Agenda has compact event rows, toolbar search, and next-alarm/next-event tiles ordered by time. New events and displayed timestamps use the phone’s time zone by default. See the [Android guide](android/README.md) for setup, tests, and current limits.
+- The Android app implements sign-in, offline Room caching, private event creation/editing, permission-aware event deletion, private/group deadline viewing, and timed one-off/recurring audible reminders. Its Agenda has compact event rows, toolbar search, and next-alarm/next-event tiles ordered by time. New events and displayed timestamps use the phone’s time zone by default. See the [Android guide](android/README.md) for setup, tests, and current limits.
 - Private **Tasks** are deployed on Jupiter and available in Android alongside Events and Birthdays: quick title capture, Urgent/High/Normal/Low priority, optional notes/reminder, completion/reopening, and deletion. See the [task guide](backend/TASKS.md).
 - An [iOS SwiftUI/AlarmKit prototype](ios/README.md) provides a native 30-second test alarm for iOS 26+. PocketBase integration and event management are not yet implemented on iOS.
 - Captured Docker deployment files, collection schema, access rules, and a fresh-instance migration are included. See the [backend guide](backend/README.md) for the verified local setup and remaining operational configuration.
+
+## App screenshots
+
+Real Android screens with fictional sample data. See the [illustrated user guide](docs/ANDROID_GUIDE.md) for all ten screenshots and step-by-step usage.
+
+<p>
+  <img src="docs/screenshots/android/agenda.png" alt="TOKI Agenda with next alarm, event and birthday" width="230">
+  <img src="docs/screenshots/android/tasks.png" alt="TOKI tasks with priority badges and completion checkboxes" width="230">
+  <img src="docs/screenshots/android/search.png" alt="TOKI global search across events, birthdays and completed tasks" width="230">
+</p>
 
 ## Architecture
 
 ```text
 PocketBase                         Android app
 Authentication            <--REST-->  Synchronization
-User-owned deadlines                  Local Room database
+Private events, birthdays, tasks      Local Room database
 Recurrence rules                      Occurrence calculation
                                       AlarmManager → audible reminders
 ```
 
-PocketBase stores deadlines and controls access to each user's records. Android caches deadlines locally, calculates upcoming occurrences, and schedules reminders on the device so that cached reminders work offline. Synchronization runs on sign-in, after event creation, and when requested manually.
+PocketBase stores events, birthdays and tasks and controls access to each user's records. Android caches them locally, calculates upcoming occurrences, and schedules reminders on the device so cached reminders work offline. Sync runs on sign-in, after event/birthday creation and editing, and when requested manually. Task writes update the local cache and alarms from the server response. Global search uses the cache without a network request.
 
 The app uses **Kotlin, Jetpack Compose, Room, and AlarmManager**. Alarm-clock scheduling drives a foreground audio player and a lock-screen Dismiss screen. Notification and exact-alarm permissions are required; full-screen alarm access enables the lock-screen display. Cached alarms are restored after reboot/unlock, app updates, and clock/time-zone changes.
 
@@ -65,16 +74,17 @@ PocketBase stores recurrence data; Android calculates occurrences locally. For e
 }
 ```
 
-This excludes November 2 and adds November 4 at 09:00 local time. These exception strings follow the local-time format used by the current tests. Timed recurrence supports DST transitions, exclusions/additions, and offline advancement. Existing series keep their saved event zone, while the app displays times in the phone’s current zone. All-day reminders are not scheduled until an explicit reminder-time policy is defined. See the [recurrence contract](android/README.md#recurrence).
+This excludes November 2 and adds November 4 at 09:00 local time. These exception strings follow the local-time format used by the current tests. Timed recurrence supports DST transitions, exclusions/additions, and offline advancement. Existing series keep their saved event zone, while the app displays times in the phone’s current zone. Generic all-day deadline reminders are not scheduled until an explicit reminder-time policy is defined; the dedicated Birthday type has its own local reminder time. See the [recurrence contract](android/README.md#recurrence).
 
 ## Use the Android app
 
 1. Install the debug build from Android Studio or follow the [build instructions](android/README.md#build-and-verify), then sign in with a PocketBase user account.
 2. Open **Alarms**, enable Notifications and Exact alarms, and enable Lock-screen display. Try the 30-second test before relying on reminders.
-3. In **Agenda**, tap **+ New event** to create a private event. Enabled, a five-minute reminder, a 60-minute duration, and the phone’s time zone are the defaults. The initial date/time is one hour ahead. Saving requires a connection and automatically syncs the event.
+3. In **Agenda → Events**, tap **+ New event** to create a private event. Use **Birthdays → + New birthday** for annual birthdays or **Tasks → + New task** for quick capture. Each list opens its own creation form. Enabled, a five-minute reminder, a 60-minute duration, and the phone’s time zone are the defaults. The initial date/time is one hour ahead. Saving requires a connection and automatically syncs the event.
 4. The green **Next alarm** and blue **Next event** tiles show the earlier time on the left. After an alarm, the event stays visible as **Due soon** until its deadline. Past one-off events remain under **All**.
 5. To delete an event, refresh once to load permissions, expand its row, tap **Delete event**, and confirm. Recurring deletion removes the entire series; shared events are deleted for everyone and require group owner/admin rights.
-6. Use the magnifying glass left of refresh to search all cached events, birthdays and tasks, including completed tasks; select a result to open its list and details. Tap a compact event row for details. **Today** uses the phone’s date. Refresh after changes made in PocketBase.
+6. After scrolling down, use the small **↑ Back to top** button on the left; the create button stays on the right.
+7. Use the magnifying glass left of refresh to search all cached events, birthdays and tasks, including completed tasks; select a result to open its list and details. Tap a compact event row for details. **Today** uses the phone’s date. Refresh after changes made in PocketBase.
 
 Expand an event and tap **Edit event** to update a regular event or birthday in Android; saving syncs changes and rebuilds reminders. Group event creation, memberships, and personal reminder preferences are managed in PocketBase. Background sync and all-day alarms are not implemented. See the [Android guide](android/README.md) for limitations and troubleshooting.
 
@@ -143,7 +153,7 @@ The suite creates disabled temporary deadlines with a `PBSEC-` prefix, updates t
 
 API tests cover authentication, own-record operations, cross-user and anonymous access attempts, recurrence exception persistence, and cleanup. Two local Python `dateutil` checks cover recurrence expansion and preservation of 09:00 Zurich time across the spring daylight-saving transition.
 
-The Python recurrence checks do not execute Android code or validate audible delivery. Android has separate unit and phone UI tests; the latest feature checks passed 31 unit tests, eleven phone UI tests, and three cache/migration checks on October 21, 2026. See the [Android testing guide](android/README.md#build-and-verify). Ownership-transfer tests target another real user. List checks filter by the known temporary record ID to avoid pagination gaps, and anonymous list access must not expose that record. Unexpectedly created records are tracked for cleanup, with other configured users tried if ownership has changed. These checks do not constitute a complete security audit.
+The Python recurrence checks do not execute Android code or validate audible delivery. Android has separate unit and phone UI tests; the latest documentation verification on October 21, 2026 passed 45 unit tests and 21 navigation/form UI checks, plus the separate screenshot capture. See the [Android testing guide](android/README.md#build-and-verify). Ownership-transfer tests target another real user. List checks filter by the known temporary record ID to avoid pagination gaps, and anonymous list access must not expose that record. Unexpectedly created records are tracked for cleanup, with other configured users tried if ownership has changed. These checks do not constitute a complete security audit.
 
 ## Next steps
 
