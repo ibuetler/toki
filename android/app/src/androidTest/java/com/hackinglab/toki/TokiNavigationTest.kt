@@ -15,7 +15,7 @@ import java.io.File
 /** Synthetic UI data: never reads sessions, accesses the backend, or schedules alarms. */
 class TokiNavigationTest {
     @get:Rule val screen = createComposeRule()
-    private fun render(dark: Boolean = false, reminded: Boolean = false, includePast: Boolean = false, includeBirthday: Boolean = false, birthdaysAvailable: Boolean = true, onCreate: (com.hackinglab.toki.data.NewEvent) -> Unit = {}, onDelete: (String) -> Unit = {}, onEdit: (String) -> Unit = {}) {
+    private fun render(dark: Boolean = false, reminded: Boolean = false, includePast: Boolean = false, includeBirthday: Boolean = false, birthdaysAvailable: Boolean = true, onCreate: (com.hackinglab.toki.data.NewEvent) -> Unit = {}, onDelete: (String) -> Unit = {}, onEdit: (String) -> Unit = {}, tasks: List<com.hackinglab.toki.data.TokiTask> = emptyList(), onSaveTask: (com.hackinglab.toki.data.TaskDraft, String?) -> Unit = { _, _ -> }, onCompleteTask: (String, Boolean) -> Unit = { _, _ -> }) {
         val start = System.currentTimeMillis() + 3_600_000
         val events = listOf(
             Deadline().apply { id = "one"; title = "Project milestone"; timezone = "Europe/Zurich"; enabled = true; reminderMinutes = if (reminded) 120 else 0; startMillis = start },
@@ -31,12 +31,58 @@ class TokiNavigationTest {
                 onDispose { view.keepScreenOn = previous }
             }
             TOKITheme(darkTheme = dark) {
-                TokiScreen(TokiState(birthdaysAvailable = birthdaysAvailable, deletableIds = setOf("one"), deletePermissionsLoaded = true, ready = true, session = Session("preview", "preview", "hello@example.com"), deadlines = records,
+                TokiScreen(TokiState(tasks = tasks, tasksAvailable = true, birthdaysAvailable = birthdaysAvailable, deletableIds = setOf("one"), deletePermissionsLoaded = true, ready = true, session = Session("preview", "preview", "hello@example.com"), deadlines = records,
                     notificationsAllowed = true, exactAllowed = true, fullScreenAllowed = true, scheduled = 1,
                     previews = records.associate { it.id to if (it.kind == "birthday") EventPreview(System.currentTimeMillis() - 3_600_000, visibleUntil = System.currentTimeMillis() + 3_600_000) else EventPreview(if (it.id == "past") null else it.startMillis, nextReminderStart = if (reminded && it.enabled) it.startMillis + 7 * 86_400_000L else it.startMillis) }),
-                    onEdit = onEdit, onDelete = onDelete, onCreate = onCreate, onLogin = { _, _ -> }, onSync = {}, onLogout = {}, onTest = {}, onNotifications = {}, onExact = {}, onFullScreen = {})
+                    onSaveTask = onSaveTask, onCompleteTask = onCompleteTask, onEdit = onEdit, onDelete = onDelete, onCreate = onCreate, onLogin = { _, _ -> }, onSync = {}, onLogout = {}, onTest = {}, onNotifications = {}, onExact = {}, onFullScreen = {})
             }
         }
+    }
+    @Test fun taskQuickCaptureNeedsOnlyTitleAndUsesNormalPriority() {
+        var saved: com.hackinglab.toki.data.TaskDraft? = null
+        render(onSaveTask = { draft, id -> org.junit.Assert.assertNull(id); saved = draft })
+        screen.onNodeWithText("Tasks", useUnmergedTree = true).performScrollTo().performClick()
+        screen.onNodeWithText("+  New task").performClick()
+        screen.onNodeWithText("Task").performTextInput("Ask Peter about the VPN")
+        screen.onNodeWithText("Notes (optional)").assertDoesNotExist()
+        screen.onNodeWithTag("task-form").performScrollToNode(hasText("Add task"))
+        screen.onNodeWithText("Add task").performClick()
+        screen.runOnIdle {
+            org.junit.Assert.assertEquals("Ask Peter about the VPN", saved?.title)
+            org.junit.Assert.assertEquals("normal", saved?.priority)
+            org.junit.Assert.assertEquals(0L, saved?.reminderMillis)
+        }
+    }
+    @Test fun tasksSortByPriorityAndCompletedViewAllowsReopening() {
+        fun task(id: String, priority: String, created: Long, completed: Boolean = false) = com.hackinglab.toki.data.TokiTask().apply {
+            this.id = id; title = id; this.priority = priority; createdMillis = created; this.completed = completed
+        }
+        var changed: Pair<String, Boolean>? = null
+        render(tasks = listOf(task("low", "low", 20), task("old-high", "high", 1), task("urgent", "urgent", 0),
+            task("new-high", "high", 10), task("done", "normal", 0, true)), onCompleteTask = { id, done -> changed = id to done })
+        screen.onNodeWithText("Tasks", useUnmergedTree = true).performScrollTo().performClick()
+        screen.onNodeWithTag("agenda-content").performScrollToNode(hasTestTag("task-old-high"))
+        val urgent = screen.onNodeWithTag("task-urgent").fetchSemanticsNode().boundsInRoot.top
+        val newer = screen.onNodeWithTag("task-new-high").fetchSemanticsNode().boundsInRoot.top
+        val older = screen.onNodeWithTag("task-old-high").fetchSemanticsNode().boundsInRoot.top
+        org.junit.Assert.assertTrue(urgent < newer && newer < older)
+        snapshot("toki-tasks-active.png")
+        screen.onNodeWithContentDescription("Complete urgent").performClick()
+        screen.runOnIdle { org.junit.Assert.assertEquals("urgent" to true, changed) }
+        screen.onNodeWithText("Completed").performScrollTo().performClick()
+        screen.onNodeWithTag("task-done").performScrollTo()
+        screen.onNodeWithContentDescription("Reopen done").performClick()
+        screen.runOnIdle { org.junit.Assert.assertEquals("done" to false, changed) }
+        snapshot("toki-tasks.png")
+    }
+    @Test fun taskEditPreservesNotesAndOptionalReminder() {
+        val task = com.hackinglab.toki.data.TokiTask().apply { id = "one"; title = "Remember this"; notes = "Existing notes"; priority = "high"; reminderMillis = System.currentTimeMillis() + 3_600_000 }
+        var saved: com.hackinglab.toki.data.TaskDraft? = null
+        screen.setContent { TOKITheme { TaskForm(task, false, null, {}, { saved = it }) } }
+        screen.onNodeWithText("Remember this").performTextReplacement("Updated thought")
+        screen.onNodeWithTag("task-form").performScrollToNode(hasText("Save task"))
+        screen.onNodeWithText("Save task").performClick()
+        screen.runOnIdle { org.junit.Assert.assertEquals(com.hackinglab.toki.data.TaskDraft.from(task).copy(title = "Updated thought"), saved) }
     }
     @Test fun expandedRowOffersEditBesideDelete() {
         var selected: String? = null

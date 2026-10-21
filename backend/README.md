@@ -51,3 +51,7 @@ The copied production Compose file does not include a migration mount. Before de
 SMTP is confirmed working on Jupiter. SMTP credentials and other server settings remain excluded from Git. The exact running image digest, backup scheduling, and a tested restore procedure still need to be captured separately. Keep backup archives outside Git; verify restoration in a separate environment before upgrades. The supplied database copy includes WAL files and should not be treated as a verified restorable backup.
 
 References: [PocketBase migrations](https://pocketbase.io/docs/js-migrations/), [API rules](https://pocketbase.io/docs/api-rules-and-filters/), and [deployment guidance](https://pocketbase.io/docs/going-to-production/).
+
+## Lightweight tasks
+
+Private tasks are a separate collection with four priorities, optional one-off reminders, and completion status. See [task schema, testing and deployment](TASKS.md). The additive migration is `1792627200_tasks.js`; existing deadlines and birthdays are unchanged.

@@ -9,6 +9,7 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import com.hackinglab.toki.data.alarm
 import com.hackinglab.toki.data.Deadline
 import com.hackinglab.toki.data.OccurrencePlanner
 
@@ -137,14 +138,14 @@ class ReminderReceiver : BroadcastReceiver() {
                     if (id == Reminders.TEST) {
                         if (app.reminders.consumeTest()) app.reminders.show(id, "TOKI test reminder", "Your phone can play TOKI reminders while the app is closed.")
                     } else if (app.sessions.load() != null) {
-                        val event = app.database.deadlines().find(id)
+                        val event = if (id.startsWith("task:")) app.database.tasks().find(id.removePrefix("task:"))?.alarm() else app.database.deadlines().find(id)
                         val occurrence = app.reminders.consumeOccurrence(id)
                         if (event != null) {
                             if (event.enabled && (!event.allDay || event.kind == "birthday") && occurrence != null) {
                                 app.reminders.show(id, event.title, if (event.kind == "birthday") {
                                     val age = com.hackinglab.toki.data.BirthdaySpec.from(event).ageOn(occurrence)
                                     if (age == null) "It’s their birthday today!" else "Turning $age today!"
-                                } else "Starts in ${event.reminderMinutes} minutes")
+                                } else if (event.kind == "task") "Task reminder. Mark it done in TOKI when finished." else "Starts in ${event.reminderMinutes} minutes")
                             }
                             // Advance only this event so simultaneous alarms retain their triggers.
                             app.reminders.scheduleNext(event)

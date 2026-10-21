@@ -16,7 +16,7 @@ object EventTime {
     fun reminderAt(start: Long, minutes: Int): Long = Math.subtractExact(start, minutes.toLong() * 60_000)
 }
 
-data class DeadlineSnapshot(val records: List<Deadline>, val deletableIds: Set<String>, val birthdaysAvailable: Boolean)
+data class DeadlineSnapshot(val records: List<Deadline>, val deletableIds: Set<String>, val birthdaysAvailable: Boolean, val tasks: List<TokiTask> = emptyList(), val tasksAvailable: Boolean = false)
 
 class PocketBase(internal val connect: (String) -> HttpURLConnection = { URI(BASE + it).toURL().openConnection() as HttpURLConnection }) {
     companion object { const val BASE = "https://pocketbase.hacking-lab.com" }
@@ -116,6 +116,26 @@ class PocketBase(internal val connect: (String) -> HttpURLConnection = { URI(BAS
         val collection = if (birthday) "birthdays" else "deadlines"
         request("/api/collections/$collection/records/$recordId", session.token, method = "DELETE")
     }
+    private fun taskPath(id: String = ""): String {
+        require(id.isEmpty() || id.matches(Regex("[a-zA-Z0-9]{15}"))) { "Invalid task identifier." }
+        return "/api/collections/tasks/records" + if (id.isEmpty()) "" else "/$id"
+    }
+    private fun task(json: JSONObject) = TokiTask().apply {
+        id = json.getString("id"); title = json.getString("title"); notes = json.optString("notes")
+        priority = json.getString("priority"); completed = json.getBoolean("completed")
+        reminderMillis = json.optString("remind_at").takeIf { it.isNotBlank() }?.let(EventTime::parse) ?: 0
+        createdMillis = EventTime.parse(json.getString("created"))
+    }
+    fun saveTask(session: Session, draft: TaskDraft, id: String? = null): TokiTask {
+        draft.validate()
+        val payload = JSONObject().put("title", draft.title.trim()).put("notes", draft.notes).put("priority", draft.priority)
+            .put("remind_at", if (draft.reminderMillis == 0L) "" else Instant.ofEpochMilli(draft.reminderMillis).toString())
+        if (id == null) payload.put("owner", session.userId).put("completed", false)
+        return task(request(taskPath(id.orEmpty()), session.token, payload, if (id == null) "POST" else "PATCH"))
+    }
+    fun completeTask(session: Session, id: String, completed: Boolean): TokiTask =
+        task(request(taskPath(id), session.token, JSONObject().put("completed", completed), "PATCH"))
+    fun deleteTask(session: Session, id: String) { request(taskPath(id), session.token, method = "DELETE") }
     fun deadlines(session: Session): DeadlineSnapshot {
         val groupRecords = all("groups", session.token)
         val groups = groupRecords.associate { it.getString("id") to it.getString("name") }
@@ -164,6 +184,12 @@ class PocketBase(internal val connect: (String) -> HttpURLConnection = { URI(BAS
                 if (json.getString("owner") == session.userId) deletableIds += id
             }
         }
-        return DeadlineSnapshot(records + birthdayRecords, deletableIds, birthdaysAvailable)
+        var tasksAvailable = true
+        val tasks = try { all("tasks", session.token).map(::task) } catch (error: ApiFailure) {
+            if (error.status != 404) throw error
+            tasksAvailable = false
+            emptyList()
+        }
+        return DeadlineSnapshot(records + birthdayRecords, deletableIds, birthdaysAvailable, tasks, tasksAvailable)
     }
 }

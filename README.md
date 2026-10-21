@@ -1,6 +1,6 @@
 # TOKI
 
-TOKI is a deadline management project with a PocketBase backend and a working Kotlin/Compose Android app. It helps users remember meetings and recurring events, such as birthdays, through audible reminders—normally five minutes before an event.
+TOKI is a deadline management project with a PocketBase backend and a working Kotlin/Compose Android app. It captures lightweight private tasks and helps users remember meetings and recurring events, such as birthdays, through audible reminders—normally five minutes before an event.
 
 The project follows the [initial design and backend setup discussion](https://chatgpt.com/share/6ad72066-9274-83eb-9568-a003b315f269).
 
@@ -10,6 +10,7 @@ The project follows the [initial design and backend setup discussion](https://ch
 - This repository contains Python authorization and recurrence regression tests. The two-user remote suite returned **54 PASS, 0 FAIL**, including deletion of all four temporary records. Local group validation also passes the four-user private regression and group authorization checks described below.
 - Group events and personal reminder preferences are deployed to Jupiter; the live group suite passed **75 checks with 0 failures**. See [group events](backend/GROUPS.md).
 - The Android app implements sign-in, offline Room caching, private event creation, permission-aware event deletion, private/group deadline viewing, and timed one-off/recurring audible reminders. Its Agenda has compact event rows, toolbar search, and next-alarm/next-event tiles ordered by time. New events and displayed timestamps use the phone’s time zone by default. See the [Android guide](android/README.md) for setup, tests, and current limits.
+- Private **Tasks** are deployed on Jupiter and available in Android alongside Events and Birthdays: quick title capture, Urgent/High/Normal/Low priority, optional notes/reminder, completion/reopening, and deletion. See the [task guide](backend/TASKS.md).
 - An [iOS SwiftUI/AlarmKit prototype](ios/README.md) provides a native 30-second test alarm for iOS 26+. PocketBase integration and event management are not yet implemented on iOS.
 - Captured Docker deployment files, collection schema, access rules, and a fresh-instance migration are included. See the [backend guide](backend/README.md) for the verified local setup and remaining operational configuration.
 
@@ -26,6 +27,8 @@ Recurrence rules                      Occurrence calculation
 PocketBase stores deadlines and controls access to each user's records. Android caches deadlines locally, calculates upcoming occurrences, and schedules reminders on the device so that cached reminders work offline. Synchronization runs on sign-in, after event creation, and when requested manually.
 
 The app uses **Kotlin, Jetpack Compose, Room, and AlarmManager**. Alarm-clock scheduling drives a foreground audio player and a lock-screen Dismiss screen. Notification and exact-alarm permissions are required; full-screen alarm access enables the lock-screen display. Cached alarms are restored after reboot/unlock, app updates, and clock/time-zone changes.
+
+Private tasks use a separate collection, remain active until completed, and sort by priority then newest first. Priority does not trigger alarms. Optional reminders ring once; completed tasks stay in Completed until manually reopened or deleted.
 
 Private birthdays are a separate yearly event type with an optional birth year, a local 09:00 reminder by default, and a selectable February 29 policy. See [birthday setup and backend rollout](backend/BIRTHDAYS.md).
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Internal SSH worker: rehearse an additive birthday migration, optionally deploy."""
+"""Internal SSH worker: rehearse a reviewed additive migration, optionally deploy."""
 import collections
 import datetime
 import hashlib
@@ -13,8 +13,11 @@ import sys
 import tempfile
 import time
 
-MIGRATION = '1792540800_birthdays.js'
-container, app_name, work_name, mode = sys.argv[1:]
+container, app_name, work_name, mode = sys.argv[1:5]
+collection = sys.argv[5] if len(sys.argv) > 5 else 'birthdays'
+if collection not in {'birthdays', 'tasks'}: raise RuntimeError('Unreviewed migration')
+MIGRATION = {'birthdays': '1792540800_birthdays.js', 'tasks': '1792627200_tasks.js'}[collection]
+required_fields = ({'owner', 'name', 'month', 'day', 'birth_year', 'reminder_hour', 'reminder_minute', 'leap_day_policy', 'enabled'} if collection == 'birthdays' else {'owner', 'title', 'notes', 'priority', 'completed', 'remind_at'})
 app, work = Path(app_name), Path(work_name)
 apply = mode == 'apply'
 
@@ -55,15 +58,15 @@ def verify(before_file, after_file):
                 if old - new or sum(new.values()) != sum(old.values()) + 1:
                     raise RuntimeError('Unexpected schema/history changes: ' + table)
             elif old != new: raise RuntimeError('Existing table changed: ' + table)
-        row = after.execute("SELECT listRule,viewRule,createRule,updateRule,deleteRule FROM _collections WHERE name='birthdays'").fetchone()
-        if not row or not all(row): raise RuntimeError('Birthday rules missing')
+        row = after.execute("SELECT listRule,viewRule,createRule,updateRule,deleteRule FROM _collections WHERE name=?", (collection,)).fetchone()
+        if not row or not all(row): raise RuntimeError(collection + ' rules missing')
         for rule in row:
-            if 'owner = @request.auth.id' not in rule: raise RuntimeError('Birthday owner isolation missing')
-        fields = {r[1] for r in after.execute('PRAGMA table_info(birthdays)')}
-        if not {'owner', 'name', 'month', 'day', 'birth_year', 'reminder_hour', 'reminder_minute', 'leap_day_policy', 'enabled'} <= fields:
-            raise RuntimeError('Birthday fields missing')
-        if after.execute('SELECT count(*) FROM birthdays').fetchone()[0] != 0: raise RuntimeError('New birthday collection is not empty')
-    print('PASS: existing records, settings, schemas and rules preserved; private birthday collection added.', flush=True)
+            if 'owner = @request.auth.id' not in rule: raise RuntimeError(collection + ' owner isolation missing')
+        fields = {r[1] for r in after.execute('PRAGMA table_info(' + quote(collection) + ')')}
+        if not required_fields <= fields:
+            raise RuntimeError(collection + ' fields missing')
+        if after.execute('SELECT count(*) FROM ' + quote(collection)).fetchone()[0] != 0: raise RuntimeError('New ' + collection + ' collection is not empty')
+    print('PASS: existing records, settings, schemas and rules preserved; private ' + collection + ' collection added.', flush=True)
 
 
 info = json.loads(command('docker', 'inspect', container))[0]
@@ -80,7 +83,7 @@ if (app / 'pb_migrations' / MIGRATION).exists(): raise RuntimeError('Migration f
 print('Preflight passed; snapshotting databases for isolated rehearsal.', flush=True)
 snapshot(app / 'pb_data/data.db', work / 'before.db')
 with sqlite3.connect(work / 'before.db') as db:
-    if db.execute("SELECT count(*) FROM _collections WHERE name='birthdays'").fetchone()[0]: raise RuntimeError('Birthdays already installed')
+    if db.execute("SELECT count(*) FROM _collections WHERE name=?", (collection,)).fetchone()[0]: raise RuntimeError(collection + ' already installed')
     names = {r[0] for r in db.execute('SELECT name FROM _collections')}
     if not {'users', 'deadlines', 'groups', 'group_members', 'deadline_preferences'} <= names: raise RuntimeError('Expected TOKI group schema missing')
 runtime = work / 'runtime'
@@ -106,7 +109,7 @@ finally:
 print('Rehearsal passed; no live changes made.', flush=True)
 if not apply: sys.exit(0)
 
-backup = Path(tempfile.mkdtemp(prefix='backups-toki-birthdays-' + datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ') + '-', dir=app))
+backup = Path(tempfile.mkdtemp(prefix='backups-toki-' + collection + '-' + datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ') + '-', dir=app))
 os.chmod(backup, 0o700)
 print('Backup directory: ' + str(backup), flush=True)
 stopped = False
@@ -140,7 +143,7 @@ try:
     else: raise RuntimeError('Health check failed')
     snapshot(app / 'pb_data/data.db', work / 'deployment-after.db')
     verify(work / 'deployment-before.db', work / 'deployment-after.db')
-    print('Birthday migration deployed; PocketBase is healthy. Retain backup: ' + str(backup), flush=True)
+    print(collection + ' migration deployed; PocketBase is healthy. Retain backup: ' + str(backup), flush=True)
 except Exception:
     if migration_installed:
         subprocess.run(['docker', 'stop', container], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

@@ -27,7 +27,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.hackinglab.toki.data.Deadline
+import com.hackinglab.toki.data.*
 import com.hackinglab.toki.data.EventTime
 import kotlinx.coroutines.delay
 import java.time.*
@@ -46,7 +46,7 @@ private fun Glyph(@DrawableRes resource: Int, modifier: Modifier = Modifier, tin
 @Composable
 internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onSync: () -> Unit,
     onLogout: () -> Unit, onTest: () -> Unit, onNotifications: () -> Unit,
-    onExact: () -> Unit, onFullScreen: () -> Unit, onCreate: (com.hackinglab.toki.data.NewEvent) -> Unit = {}, onDelete: (String) -> Unit = {}, onEdit: (String) -> Unit = {}, onCloseEdit: () -> Unit = {}, onUpdate: (com.hackinglab.toki.data.NewEvent) -> Unit = {}) {
+    onExact: () -> Unit, onFullScreen: () -> Unit, onCreate: (com.hackinglab.toki.data.NewEvent) -> Unit = {}, onDelete: (String) -> Unit = {}, onEdit: (String) -> Unit = {}, onCloseEdit: () -> Unit = {}, onUpdate: (com.hackinglab.toki.data.NewEvent) -> Unit = {}, onSaveTask: (TaskDraft, String?) -> Unit = { _, _ -> }, onCompleteTask: (String, Boolean) -> Unit = { _, _ -> }, onDeleteTask: (String) -> Unit = {}, onClearTaskError: () -> Unit = {}) {
     var deletingId by rememberSaveable { mutableStateOf<String?>(null) }
     state.deadlines.find { it.id == deletingId }?.let { event ->
         AlertDialog(onDismissRequest = { deletingId = null },
@@ -67,6 +67,22 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
     LaunchedEffect(state.createdVersion) { creating = false }
     if (creating && state.session != null) NewEventScreen(state.busy, state.createError, { creating = false }, onCreate, state.birthdaysAvailable)
     var tab by rememberSaveable { mutableIntStateOf(0) }
+    var taskList by rememberSaveable { mutableStateOf(false) }
+    var completedTasks by rememberSaveable { mutableStateOf(false) }
+    var taskForm by rememberSaveable { mutableStateOf(false) }
+    var editingTaskId by rememberSaveable { mutableStateOf<String?>(null) }
+    var deletingTaskId by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(state.taskSavedVersion) { taskForm = false; editingTaskId = null }
+    if (taskForm && state.session != null) key(editingTaskId) {
+        TaskForm(state.tasks.find { it.id == editingTaskId }, state.busy, state.taskError,
+            { taskForm = false; editingTaskId = null; onClearTaskError() }, { onSaveTask(it, editingTaskId) })
+    }
+    state.tasks.find { it.id == deletingTaskId }?.let { task ->
+        AlertDialog(onDismissRequest = { deletingTaskId = null }, title = { Text("Delete task?") },
+            text = { Text("Delete “${task.title}” permanently? Its future reminder will be cancelled.") },
+            confirmButton = { TextButton(onClick = { deletingTaskId = null; onDeleteTask(task.id) }, enabled = !state.busy) { Text("Delete permanently", color = MaterialTheme.colorScheme.error) } },
+            dismissButton = { TextButton(onClick = { deletingTaskId = null }) { Text("Cancel") } })
+    }
     var birthdayList by rememberSaveable { mutableStateOf(false) }
     var filter by rememberSaveable { mutableStateOf("Upcoming") }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
@@ -77,8 +93,8 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
     }
     val signedIn = state.session != null
     if (searchOpen && signedIn) AlertDialog(onDismissRequest = { searchOpen = false },
-        title = { Text("Find an event") },
-        text = { OutlinedTextField(query, { query = it }, label = { Text("Title, description or group") },
+        title = { Text(if (taskList) "Find a task" else "Find an event") },
+        text = { OutlinedTextField(query, { query = it }, label = { Text(if (taskList) "Task title or notes" else "Title, description or group") },
             modifier = Modifier.fillMaxWidth(), singleLine = true,
             trailingIcon = { if (query.isNotEmpty()) TextButton(onClick = { query = "" }) { Text("Clear") } }) },
         confirmButton = { TextButton(onClick = { searchOpen = false }) { Text("Show results") } },
@@ -94,7 +110,7 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
             else -> true
         }
     }.sortedWith(compareBy<Deadline> { state.previews[it.id]?.nextStart ?: it.startMillis }.thenBy { it.title.lowercase() }.thenBy { it.id })
-    val next = state.deadlines.filter { it.enabled && state.previews[it.id]?.problem == null }
+    val next = (state.deadlines + state.tasks.mapNotNull { it.alarm() }).filter { it.enabled && state.previews[it.id]?.problem == null }
         .mapNotNull { e -> state.previews[e.id]?.let { it.nextReminderStart ?: it.nextStart }?.let { start -> e to EventTime.reminderAt(start, e.reminderMinutes) } }
         .filter { it.second > now }.minByOrNull { it.second }
     val nextEvent = state.deadlines.filter { it.kind != "birthday" }.mapNotNull { event ->
@@ -105,8 +121,8 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
     }.minByOrNull { it.second }
     Scaffold(containerColor = MaterialTheme.colorScheme.background,
         floatingActionButton = {
-            if (signedIn && tab == 0) ExtendedFloatingActionButton(onClick = { if (!state.busy) creating = true },
-                containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary) { Text("+  New event") }
+            if (signedIn && tab == 0) ExtendedFloatingActionButton(onClick = { if (!state.busy) { if (taskList) { if (state.tasksAvailable) { editingTaskId = null; onClearTaskError(); taskForm = true } } else creating = true } },
+                containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary) { Text(if (taskList) "+  New task" else "+  New event") }
         },
         bottomBar = {
             if (signedIn) NavigationBar(containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 0.dp) {
@@ -125,7 +141,7 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
                     }
                     if (signedIn) Row {
                         IconButton(onClick = { tab = 0; searchOpen = true }) {
-                            Icon(painterResource(R.drawable.ic_search), "Search events", tint = MaterialTheme.colorScheme.primary)
+                            Icon(painterResource(R.drawable.ic_search), if (taskList) "Search tasks" else "Search events", tint = MaterialTheme.colorScheme.primary)
                         }
                         IconButton(onClick = onSync, enabled = !state.busy) {
                             Icon(painterResource(R.drawable.ic_sync), "Sync events", tint = MaterialTheme.colorScheme.primary)
@@ -175,7 +191,7 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
                             } }
                         }
                     }
-                    item { BirthdayTile(nextBirthday, now) { birthdayList = true; filter = "Upcoming"; query = "" } }
+                    item { BirthdayTile(nextBirthday, now) { taskList = false; birthdayList = true; filter = "Upcoming"; query = "" } }
                     if (!permissionReady || !state.fullScreenAllowed) item {
                         Surface(onClick = { tab = 1 }, shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.secondaryContainer) {
                             Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -192,14 +208,30 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
                         }
                     }
                     item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Your events", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                        val noun = if (birthdayList) { if (visible.size == 1) "birthday" else "birthdays" } else { if (visible.size == 1) "event" else "events" }
-                        Text("${visible.size} $noun", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(if (taskList) "Your tasks" else "Your events", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        val taskCount = state.tasks.count { it.completed == completedTasks && (query.isBlank() || it.title.contains(query, true) || it.notes.contains(query, true)) }
+                        val noun = if (taskList) { if (taskCount == 1) "task" else "tasks" } else if (birthdayList) { if (visible.size == 1) "birthday" else "birthdays" } else { if (visible.size == 1) "event" else "events" }
+                        Text("${if (taskList) taskCount else visible.size} $noun", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     } }
-                    item { PrimaryTabRow(selectedTabIndex = if (birthdayList) 1 else 0, containerColor = Color.Transparent) {
-                        Tab(selected = !birthdayList, onClick = { birthdayList = false; filter = "Upcoming" }, text = { Text("Events") })
-                        Tab(selected = birthdayList, onClick = { birthdayList = true; filter = "Upcoming" }, text = { Text("Birthdays") })
+                    item { PrimaryTabRow(selectedTabIndex = if (taskList) 2 else if (birthdayList) 1 else 0, containerColor = Color.Transparent) {
+                        Tab(selected = !birthdayList && !taskList, onClick = { taskList = false; birthdayList = false; filter = "Upcoming" }, text = { Text("Events") })
+                        Tab(selected = birthdayList && !taskList, onClick = { taskList = false; birthdayList = true; filter = "Upcoming" }, text = { Text("Birthdays") })
+                        Tab(selected = taskList, onClick = { taskList = true }, text = { Text("Tasks") })
                     } }
+                    if (taskList) {
+                        item { Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterChip(selected = !completedTasks, onClick = { completedTasks = false }, label = { Text("Active") })
+                            FilterChip(selected = completedTasks, onClick = { completedTasks = true }, label = { Text("Completed") })
+                        } }
+                        if (!state.tasksAvailable) item { Text("Task setup is pending on the backend. Tap Sync after setup.") }
+                        val tasks = TaskPriority.sorted(state.tasks.filter { it.completed == completedTasks &&
+                            (query.isBlank() || it.title.contains(query, true) || it.notes.contains(query, true)) })
+                        if (tasks.isEmpty()) item { Text(if (query.isNotBlank()) "No tasks match your search." else if (completedTasks) "No completed tasks." else "A clear head starts here. Tap + New task to capture a thought.", style = MaterialTheme.typography.bodyMedium) }
+                        items(tasks, key = { "task:${it.id}" }) { task ->
+                            TaskCard(task, state.busy, now, { onCompleteTask(task.id, it) },
+                                { editingTaskId = task.id; onClearTaskError(); taskForm = true }, { deletingTaskId = task.id })
+                        }
+                    } else {
                     item { LazyRow(Modifier.testTag("event-filters"), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(if (birthdayList) listOf("Upcoming", "Today", "All") else listOf("Upcoming", "Today", "Groups", "All")) { option ->
                             FilterChip(selected = filter == option, onClick = { filter = option }, label = { Text(option) })
@@ -221,6 +253,7 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                             EventCard(event, state.previews[event.id], permissionReady, now, border, state.busy, event.id in state.deletableIds, state.deletePermissionsLoaded, { onEdit(event.id) }) { deletingId = event.id }
                         }
+                    }
                     }
                     item { Text(if (state.lastSync == 0L) "Not synced yet" else "Synced ${date(state.lastSync)} · Available offline", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 }

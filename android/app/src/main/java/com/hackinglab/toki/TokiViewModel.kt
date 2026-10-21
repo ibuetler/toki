@@ -13,7 +13,7 @@ import kotlinx.coroutines.withContext
 
 data class EventPreview(val nextStart: Long? = null, val problem: String? = null, val nextReminderStart: Long? = null, val visibleUntil: Long? = null)
 
-data class TokiState(val editing: EditableEvent? = null, val editError: String? = null, val birthdaysAvailable: Boolean = false, val deletableIds: Set<String> = emptySet(), val deletePermissionsLoaded: Boolean = false, val createError: String? = null, val createdVersion: Int = 0, val ready: Boolean = false, val session: Session? = null,
+data class TokiState(val tasks: List<TokiTask> = emptyList(), val tasksAvailable: Boolean = false, val taskError: String? = null, val taskSavedVersion: Int = 0, val editing: EditableEvent? = null, val editError: String? = null, val birthdaysAvailable: Boolean = false, val deletableIds: Set<String> = emptySet(), val deletePermissionsLoaded: Boolean = false, val createError: String? = null, val createdVersion: Int = 0, val ready: Boolean = false, val session: Session? = null,
     val deadlines: List<Deadline> = emptyList(), val busy: Boolean = false,
     val message: String? = null, val lastSync: Long = 0, val scheduled: Int = 0,
     val exactAllowed: Boolean = false, val notificationsAllowed: Boolean = false, val fullScreenAllowed: Boolean = false, val testAt: Long = 0, val testDelay: Long = -1, val previews: Map<String, EventPreview> = emptyMap())
@@ -34,7 +34,7 @@ class TokiViewModel(application: Application) : AndroidViewModel(application) {
                     (preview?.visibleUntil ?: preview?.nextStart)?.let { it <= now } == true ||
                         preview?.nextReminderStart?.let { EventTime.reminderAt(it, event.reminderMinutes) <= now } == true
                 }) {
-                    val previews = withContext(Dispatchers.Default) { eventPreviews(current.deadlines, now) }
+                    val previews = withContext(Dispatchers.Default) { eventPreviews(current.deadlines + current.tasks.mapNotNull { it.alarm() }, now) }
                     if (!mutable.value.busy && mutable.value.deadlines === current.deadlines)
                         mutable.value = mutable.value.copy(previews = previews)
                 }
@@ -50,8 +50,9 @@ class TokiViewModel(application: Application) : AndroidViewModel(application) {
     private fun reload() {
         val count = graph.reschedule()
         val records = graph.database.deadlines().all()
-        val previews = eventPreviews(records, System.currentTimeMillis())
-        mutable.value = mutable.value.copy(birthdaysAvailable = graph.prefs.getBoolean("birthdaysAvailable", false), deletableIds = graph.prefs.getStringSet("deletableIds", emptySet()).orEmpty().toSet(), deletePermissionsLoaded = graph.prefs.contains("deletableIds"), ready = true, session = graph.sessions.load(),
+        val tasks = graph.database.tasks().all()
+        val previews = eventPreviews(records + tasks.mapNotNull { it.alarm() }, System.currentTimeMillis())
+        mutable.value = mutable.value.copy(tasks = tasks, tasksAvailable = graph.prefs.getBoolean("tasksAvailable", false), birthdaysAvailable = graph.prefs.getBoolean("birthdaysAvailable", false), deletableIds = graph.prefs.getStringSet("deletableIds", emptySet()).orEmpty().toSet(), deletePermissionsLoaded = graph.prefs.contains("deletableIds"), ready = true, session = graph.sessions.load(),
             deadlines = records, previews = previews, lastSync = graph.prefs.getLong("lastSync", 0),
             scheduled = count, testAt = graph.reminders.pendingTestAt(), testDelay = graph.reminders.lastTestDelay(), fullScreenAllowed = graph.reminders.fullScreenAllowed(), exactAllowed = graph.reminders.exactAllowed(), notificationsAllowed = graph.reminders.notificationsAllowed())
     }
@@ -69,6 +70,60 @@ class TokiViewModel(application: Application) : AndroidViewModel(application) {
                 }, ready = true)
             } finally { mutable.value = mutable.value.copy(busy = false) }
         }
+    }
+    fun clearTaskError() { mutable.value = mutable.value.copy(taskError = null) }
+    private fun taskAction(form: Boolean = false, work: (Session, () -> Unit) -> Unit) {
+        if (mutable.value.busy) return
+        mutable.value = mutable.value.copy(busy = true, message = null, taskError = null)
+        viewModelScope.launch {
+            var saved = false
+            try {
+                withContext(Dispatchers.IO) {
+                    val session = graph.api.refresh(requireNotNull(graph.sessions.load()))
+                    graph.sessions.save(session)
+                    work(session) {
+                        saved = true
+                        if (form) mutable.value = mutable.value.copy(taskSavedVersion = mutable.value.taskSavedVersion + 1)
+                    }
+                    reload()
+                }
+            } catch (error: Exception) {
+                val message = when {
+                    saved -> "Task saved. Tap Sync to refresh the local list and reminders."
+                    error is IllegalArgumentException -> error.message ?: "Check the task details."
+                    error is ApiFailure && error.status in listOf(403, 404) -> "Task unavailable or permission denied. Cancel and Sync to refresh."
+                    error is ApiFailure && error.status == 400 -> "PocketBase rejected the task. Check its details."
+                    error is ApiFailure && error.status == 401 -> "Your session expired. Sign in again."
+                    else -> "Could not confirm the change. Sync before retrying; your draft is still here."
+                }
+                mutable.value = if (form && !saved) mutable.value.copy(taskError = message) else mutable.value.copy(message = message)
+            } finally { mutable.value = mutable.value.copy(busy = false) }
+        }
+    }
+    fun saveTask(draft: TaskDraft, id: String?) {
+        if (!mutable.value.tasksAvailable || (id != null && mutable.value.tasks.none { it.id == id })) return
+        taskAction(form = true) { session, confirmed ->
+            draft.validate()
+            val original = mutable.value.tasks.find { it.id == id }
+            require(draft.reminderMillis == 0L || draft.reminderMillis == original?.reminderMillis || draft.reminderMillis > System.currentTimeMillis()) {
+                "Choose a future reminder time."
+            }
+            val task = graph.api.saveTask(session, draft, id)
+            confirmed()
+            graph.saveLocalTask(task, session.userId)
+        }
+    }
+    fun completeTask(id: String, completed: Boolean) {
+        if (mutable.value.tasks.none { it.id == id }) return
+        taskAction { session, confirmed ->
+            val task = graph.api.completeTask(session, id, completed)
+            confirmed()
+            graph.saveLocalTask(task, session.userId)
+        }
+    }
+    fun deleteTask(id: String) {
+        if (mutable.value.tasks.none { it.id == id }) return
+        taskAction { session, confirmed -> graph.api.deleteTask(session, id); confirmed(); graph.removeLocalTask(id) }
     }
     fun closeEdit() { if (!mutable.value.busy) mutable.value = mutable.value.copy(editing = null, editError = null) }
     fun editEvent(id: String) {
