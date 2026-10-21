@@ -13,7 +13,7 @@ import kotlinx.coroutines.withContext
 
 data class EventPreview(val nextStart: Long? = null, val problem: String? = null, val nextReminderStart: Long? = null)
 
-data class TokiState(val createError: String? = null, val createdVersion: Int = 0, val ready: Boolean = false, val session: Session? = null,
+data class TokiState(val deletableIds: Set<String> = emptySet(), val deletePermissionsLoaded: Boolean = false, val createError: String? = null, val createdVersion: Int = 0, val ready: Boolean = false, val session: Session? = null,
     val deadlines: List<Deadline> = emptyList(), val busy: Boolean = false,
     val message: String? = null, val lastSync: Long = 0, val scheduled: Int = 0,
     val exactAllowed: Boolean = false, val notificationsAllowed: Boolean = false, val fullScreenAllowed: Boolean = false, val testAt: Long = 0, val testDelay: Long = -1, val previews: Map<String, EventPreview> = emptyMap())
@@ -50,7 +50,7 @@ class TokiViewModel(application: Application) : AndroidViewModel(application) {
         val count = graph.reschedule()
         val records = graph.database.deadlines().all()
         val previews = eventPreviews(records, System.currentTimeMillis())
-        mutable.value = mutable.value.copy(ready = true, session = graph.sessions.load(),
+        mutable.value = mutable.value.copy(deletableIds = graph.prefs.getStringSet("deletableIds", emptySet()).orEmpty().toSet(), deletePermissionsLoaded = graph.prefs.contains("deletableIds"), ready = true, session = graph.sessions.load(),
             deadlines = records, previews = previews, lastSync = graph.prefs.getLong("lastSync", 0),
             scheduled = count, testAt = graph.reminders.pendingTestAt(), testDelay = graph.reminders.lastTestDelay(), fullScreenAllowed = graph.reminders.fullScreenAllowed(), exactAllowed = graph.reminders.exactAllowed(), notificationsAllowed = graph.reminders.notificationsAllowed())
     }
@@ -66,6 +66,32 @@ class TokiViewModel(application: Application) : AndroidViewModel(application) {
                     is java.io.IOException -> "Cannot reach PocketBase. Cached deadlines remain available; try Sync when online."
                     else -> "Could not complete the operation. Please try again."
                 }, ready = true)
+            } finally { mutable.value = mutable.value.copy(busy = false) }
+        }
+    }
+    fun deleteEvent(id: String) {
+        if (mutable.value.busy || id !in mutable.value.deletableIds) return
+        mutable.value = mutable.value.copy(busy = true, message = null)
+        viewModelScope.launch {
+            var deleted = false
+            try {
+                withContext(Dispatchers.IO) {
+                    val session = graph.api.refresh(requireNotNull(graph.sessions.load()))
+                    graph.sessions.save(session)
+                    graph.api.deleteDeadline(session, id)
+                    deleted = true
+                    graph.removeLocalEvent(id)
+                    reload()
+                }
+                mutable.value = mutable.value.copy(message = "Event deleted. Its future reminders have been cancelled on this phone.")
+            } catch (error: Exception) {
+                mutable.value = mutable.value.copy(message = when {
+                    deleted -> "Event deleted in PocketBase, but local cleanup failed. Tap Sync to remove its cached reminder."
+                    error is ApiFailure && error.status in listOf(403, 404) -> "The event was not found or you no longer have permission to delete it. Tap Sync to refresh."
+                    error is ApiFailure && error.status == 401 -> "Your session expired. Sign in again before deleting."
+                    error is java.io.IOException -> "Could not confirm deletion. Tap Sync to check whether the event still exists before retrying."
+                    else -> "Could not delete the event. Please try again."
+                })
             } finally { mutable.value = mutable.value.copy(busy = false) }
         }
     }

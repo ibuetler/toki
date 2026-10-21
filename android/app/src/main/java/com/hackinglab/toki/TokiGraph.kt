@@ -28,7 +28,8 @@ class TokiGraph private constructor(context: Context) {
     fun sync(session: Session) {
         // List rules can hide an invalid session, so validate it explicitly first.
         val refreshed = api.refresh(session)
-        val records = api.deadlines(refreshed)
+        val snapshot = api.deadlines(refreshed)
+        val records = snapshot.records
         synchronized(lock) {
             check(sessions.load()?.userId == session.userId) { "Session changed. Please try again." }
             sessions.save(refreshed)
@@ -36,9 +37,16 @@ class TokiGraph private constructor(context: Context) {
                 database.deadlines().clear()
                 database.deadlines().insert(records)
             }
-            prefs.edit().putLong("lastSync", System.currentTimeMillis()).commit()
+            prefs.edit().putLong("lastSync", System.currentTimeMillis()).putStringSet("deletableIds", snapshot.deletableIds).commit()
             reminders.rebuild(records)
         }
+    }
+    fun removeLocalEvent(id: String) = synchronized(lock) {
+        database.deadlines().delete(id)
+        val allowed = prefs.getStringSet("deletableIds", emptySet()).orEmpty().toMutableSet().apply { remove(id) }
+        prefs.edit().putStringSet("deletableIds", allowed).commit()
+        reminders.rebuild(database.deadlines().all())
+        Unit
     }
     companion object {
         val CACHE_MIGRATION = object : androidx.room.migration.Migration(1, 2) {

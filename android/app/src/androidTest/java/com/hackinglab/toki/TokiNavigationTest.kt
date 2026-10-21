@@ -15,7 +15,7 @@ import java.io.File
 /** Synthetic UI data: never reads sessions, accesses the backend, or schedules alarms. */
 class TokiNavigationTest {
     @get:Rule val screen = createComposeRule()
-    private fun render(dark: Boolean = false, reminded: Boolean = false, includePast: Boolean = false, onCreate: (com.hackinglab.toki.data.NewEvent) -> Unit = {}) {
+    private fun render(dark: Boolean = false, reminded: Boolean = false, includePast: Boolean = false, onCreate: (com.hackinglab.toki.data.NewEvent) -> Unit = {}, onDelete: (String) -> Unit = {}) {
         val start = System.currentTimeMillis() + 3_600_000
         val events = listOf(
             Deadline().apply { id = "one"; title = "Project milestone"; timezone = "Europe/Zurich"; enabled = true; reminderMinutes = if (reminded) 120 else 0; startMillis = start },
@@ -23,10 +23,10 @@ class TokiNavigationTest {
         ).reversed() + if (includePast) listOf(Deadline().apply { id = "past"; title = "Earlier deadline"; timezone = "Europe/Zurich"; startMillis = start - 7_200_000 }) else emptyList()
         screen.setContent {
             TOKITheme(darkTheme = dark) {
-                TokiScreen(TokiState(ready = true, session = Session("preview", "preview", "hello@example.com"), deadlines = events,
+                TokiScreen(TokiState(deletableIds = setOf("one"), deletePermissionsLoaded = true, ready = true, session = Session("preview", "preview", "hello@example.com"), deadlines = events,
                     notificationsAllowed = true, exactAllowed = true, fullScreenAllowed = true, scheduled = 1,
                     previews = events.associate { it.id to EventPreview(if (it.id == "past") null else it.startMillis, nextReminderStart = if (reminded && it.enabled) it.startMillis + 7 * 86_400_000L else it.startMillis) }),
-                    onCreate = onCreate, onLogin = { _, _ -> }, onSync = {}, onLogout = {}, onTest = {}, onNotifications = {}, onExact = {}, onFullScreen = {})
+                    onDelete = onDelete, onCreate = onCreate, onLogin = { _, _ -> }, onSync = {}, onLogout = {}, onTest = {}, onNotifications = {}, onExact = {}, onFullScreen = {})
             }
         }
     }
@@ -62,15 +62,23 @@ class TokiNavigationTest {
         var saved: com.hackinglab.toki.data.NewEvent? = null
         render(onCreate = { saved = it })
         screen.onNodeWithText("+  New event").performClick()
-        screen.onNode(hasText(java.time.ZoneId.systemDefault().id) and hasSetTextAction()).assertIsDisplayed()
+        screen.onNodeWithText("Time zone").assertDoesNotExist()
+        screen.onNode(hasText(java.time.ZoneId.systemDefault().id) and hasSetTextAction()).assertDoesNotExist()
         screen.onNodeWithTag("new-event-form").performScrollToNode(hasText("Create event"))
         screen.onNodeWithText("Create event").assertIsNotEnabled()
         screen.onNodeWithTag("new-event-form").performScrollToNode(hasText("Title"))
         screen.onNodeWithText("Title").performTextInput("Preview event")
+        screen.onNodeWithText("Description (optional)").assertDoesNotExist()
+        screen.onNodeWithText("+ Add description").performClick()
+        screen.onNodeWithText("Description (optional)").performTextInput("Bring the project notes")
+        screen.onNodeWithText("Hide description").performClick()
+        screen.onNodeWithText("Description (optional)").assertDoesNotExist()
+        screen.onNodeWithText("Edit description").assertIsDisplayed()
         screen.onNodeWithTag("new-event-form").performScrollToNode(hasText("Create event"))
         screen.onNodeWithText("Create event").performClick()
         screen.runOnIdle {
             org.junit.Assert.assertEquals("Preview event", saved?.title)
+            org.junit.Assert.assertEquals("Bring the project notes", saved?.description)
             org.junit.Assert.assertEquals(java.time.ZoneId.systemDefault().id, saved?.timezone)
             org.junit.Assert.assertEquals(true, saved?.enabled)
             org.junit.Assert.assertEquals(5, saved?.reminderMinutes)
@@ -93,6 +101,22 @@ class TokiNavigationTest {
         val first = screen.onNodeWithTag("event-one").fetchSemanticsNode().boundsInRoot.top
         val second = screen.onNodeWithTag("event-two").fetchSemanticsNode().boundsInRoot.top
         org.junit.Assert.assertTrue(past < first && first < second)
+    }
+    @Test fun deletionRequiresConfirmationAndCanBeCancelled() {
+        val deleted = mutableListOf<String>()
+        render(onDelete = { deleted += it })
+        screen.onNodeWithTag("event-one").performScrollTo().performClick()
+        screen.onNodeWithText("Delete event").performScrollTo().performClick()
+        screen.onNodeWithText("Cancel").performClick()
+        screen.runOnIdle { org.junit.Assert.assertTrue(deleted.isEmpty()) }
+        screen.onNodeWithText("Delete event").performClick()
+        screen.onNodeWithText("Delete permanently").performClick()
+        screen.runOnIdle { org.junit.Assert.assertEquals(listOf("one"), deleted) }
+    }
+    @Test fun groupMemberCannotDeleteSharedEvent() {
+        render()
+        screen.onNodeWithTag("event-two").performScrollTo().performClick()
+        screen.onNodeWithText("Delete event").assertDoesNotExist()
     }
     @Test fun darkAgendaRenders() { render(true); screen.onNodeWithText("NEXT ALARM").assertIsDisplayed(); snapshot("toki-dark.png") }
 }

@@ -9,7 +9,7 @@ The project follows the [initial design and backend setup discussion](https://ch
 - A remote PocketBase backend has been configured at `https://pocketbase.hacking-lab.com`.
 - This repository contains Python authorization and recurrence regression tests. The two-user remote suite returned **54 PASS, 0 FAIL**, including deletion of all four temporary records. Local group validation also passes the four-user private regression and group authorization checks described below.
 - Group events and personal reminder preferences are deployed to Jupiter; the live group suite passed **75 checks with 0 failures**. See [group events](backend/GROUPS.md).
-- The Android app implements sign-in, offline Room caching, private event creation, private/group deadline viewing, and timed one-off/recurring audible reminders. Its Agenda has compact event rows, toolbar search, and next-alarm/next-event tiles ordered by time. New events and displayed timestamps use the phone’s time zone by default. See the [Android guide](android/README.md) for setup, tests, and current limits.
+- The Android app implements sign-in, offline Room caching, private event creation, permission-aware event deletion, private/group deadline viewing, and timed one-off/recurring audible reminders. Its Agenda has compact event rows, toolbar search, and next-alarm/next-event tiles ordered by time. New events and displayed timestamps use the phone’s time zone by default. See the [Android guide](android/README.md) for setup, tests, and current limits.
 - An [iOS SwiftUI/AlarmKit prototype](ios/README.md) provides a native 30-second test alarm for iOS 26+. PocketBase integration and event management are not yet implemented on iOS.
 - Captured Docker deployment files, collection schema, access rules, and a fresh-instance migration are included. See the [backend guide](backend/README.md) for the verified local setup and remaining operational configuration.
 
@@ -68,9 +68,10 @@ This excludes November 2 and adds November 4 at 09:00 local time. These exceptio
 2. Open **Alarms**, enable Notifications and Exact alarms, and enable Lock-screen display. Try the 30-second test before relying on reminders.
 3. In **Agenda**, tap **+ New event** to create a private event. Enabled, a five-minute reminder, a 60-minute duration, and the phone’s time zone are the defaults. The initial date/time is one hour ahead. Saving requires a connection and automatically syncs the event.
 4. The green **Next alarm** and blue **Next event** tiles show the earlier time on the left. After an alarm, the event stays visible as **Due soon** until its deadline. Past one-off events remain under **All**.
-5. Use the magnifying glass left of refresh to search; tap a compact event row for details. **Today** uses the phone’s date. Refresh after changes made in PocketBase.
+5. To delete an event, refresh once to load permissions, expand its row, tap **Delete event**, and confirm. Recurring deletion removes the entire series; shared events are deleted for everyone and require group owner/admin rights.
+6. Use the magnifying glass left of refresh to search; tap a compact event row for details. **Today** uses the phone’s date. Refresh after changes made in PocketBase.
 
-Existing event edits, group event creation, memberships, and personal reminder preferences are managed in PocketBase. Background sync and all-day alarms are not implemented. See the [Android guide](android/README.md) for limitations and troubleshooting.
+Existing event detail edits, group event creation, memberships, and personal reminder preferences are managed in PocketBase. Background sync and all-day alarms are not implemented. See the [Android guide](android/README.md) for limitations and troubleshooting.
 
 ## Repository layout
 
@@ -137,7 +138,7 @@ The suite creates disabled temporary deadlines with a `PBSEC-` prefix, updates t
 
 API tests cover authentication, own-record operations, cross-user and anonymous access attempts, recurrence exception persistence, and cleanup. Two local Python `dateutil` checks cover recurrence expansion and preservation of 09:00 Zurich time across the spring daylight-saving transition.
 
-The Python recurrence checks do not execute Android code or validate audible delivery. Android has separate unit and phone UI tests; the latest feature checks passed 19 unit tests and five phone UI tests on October 20, 2026. See the [Android testing guide](android/README.md#build-and-verify). Ownership-transfer tests target another real user. List checks filter by the known temporary record ID to avoid pagination gaps, and anonymous list access must not expose that record. Unexpectedly created records are tracked for cleanup, with other configured users tried if ownership has changed. These checks do not constitute a complete security audit.
+The Python recurrence checks do not execute Android code or validate audible delivery. Android has separate unit and phone UI tests; the latest feature checks passed 21 unit tests, seven phone UI tests, and one isolated cache-deletion test on October 21, 2026. See the [Android testing guide](android/README.md#build-and-verify). Ownership-transfer tests target another real user. List checks filter by the known temporary record ID to avoid pagination gaps, and anonymous list access must not expose that record. Unexpectedly created records are tracked for cleanup, with other configured users tried if ownership has changed. These checks do not constitute a complete security audit.
 
 ## Next steps
 

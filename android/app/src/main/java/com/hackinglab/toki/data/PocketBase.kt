@@ -16,14 +16,17 @@ object EventTime {
     fun reminderAt(start: Long, minutes: Int): Long = Math.subtractExact(start, minutes.toLong() * 60_000)
 }
 
+data class DeadlineSnapshot(val records: List<Deadline>, val deletableIds: Set<String>)
+
 class PocketBase {
     companion object { const val BASE = "https://pocketbase.hacking-lab.com" }
-    private fun request(path: String, token: String? = null, payload: JSONObject? = null): JSONObject {
+    private fun request(path: String, token: String? = null, payload: JSONObject? = null, method: String? = null): JSONObject {
         val connection = URI(BASE + path).toURL().openConnection() as HttpURLConnection
         try {
             connection.connectTimeout = 15_000
             connection.readTimeout = 15_000
             connection.instanceFollowRedirects = false
+            connection.requestMethod = method ?: if (payload != null) "POST" else "GET"
             if (token != null) connection.setRequestProperty("Authorization", "Bearer $token")
             if (payload != null) {
                 connection.requestMethod = "POST"
@@ -33,6 +36,7 @@ class PocketBase {
             }
             val status = connection.responseCode
             if (status !in 200..299) throw ApiFailure(status)
+            if (status == 204) return JSONObject()
             return connection.inputStream.bufferedReader().use { JSONObject(it.readText()) }
         } finally { connection.disconnect() }
     }
@@ -77,11 +81,22 @@ class PocketBase {
             .put("all_day", false).put("duration_minutes", draft.durationMinutes)
             .put("reminder_minutes", event.reminderMinutes).put("rrule", event.rrule))
     }
-    fun deadlines(session: Session): List<Deadline> {
-        val groups = all("groups", session.token).associate { it.getString("id") to it.getString("name") }
+    fun deleteDeadline(session: Session, id: String) {
+        require(id.matches(Regex("[a-zA-Z0-9]{15}"))) { "Invalid event identifier." }
+        request("/api/collections/deadlines/records/$id", session.token, method = "DELETE")
+    }
+    fun deadlines(session: Session): DeadlineSnapshot {
+        val groupRecords = all("groups", session.token)
+        val groups = groupRecords.associate { it.getString("id") to it.getString("name") }
+        val adminGroups = groupRecords.filter { it.optString("owner") == session.userId }.map { it.getString("id") }.toMutableSet()
+        all("group_members", session.token).filter { it.optString("user") == session.userId && it.optString("role") == "admin" }
+            .forEach { adminGroups += it.getString("group") }
+        val deletableIds = mutableSetOf<String>()
         val preferences = all("deadline_preferences", session.token)
             .filter { it.getString("user") == session.userId }.associateBy { it.getString("deadline") }
-        return all("deadlines", session.token).map { json ->
+        val records = all("deadlines", session.token).map { json ->
+            if (DeletePermission.allowed(session.userId, json.optString("owner"), json.optString("group"), adminGroups))
+                deletableIds += json.getString("id")
             val preference = preferences[json.getString("id")]
             Deadline().apply {
                 id = json.getString("id")
@@ -100,5 +115,6 @@ class PocketBase {
                 enabled = json.getBoolean("enabled") && (preference?.getBoolean("enabled") ?: true)
             }
         }
+        return DeadlineSnapshot(records, deletableIds)
     }
 }

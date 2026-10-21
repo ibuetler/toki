@@ -15,12 +15,13 @@ Kotlin/Compose app for `https://pocketbase.hacking-lab.com`, package `com.hackin
 
 ## Interface
 
-- **New event** on Agenda creates a private timed event. Enabled and the phone’s current time zone are preselected; the event zone can be changed before saving. The initial date/time is one hour ahead, the reminder is five minutes before, and duration is 60 minutes. Choose date/time, reminder offset, duration, and no repeat or daily/weekly/monthly/yearly repeat. Saving requires connectivity and automatically syncs the new event. Invalid time zones and nonexistent DST times are rejected.
+- **New event** on Agenda creates a private timed event. Enabled is preselected. The phone’s current time zone is applied automatically when saving, with no time-zone field in the form. The initial date/time is one hour ahead, the reminder is five minutes before, and duration is 60 minutes. Description is collapsed by default: tap **+ Add description** to enter notes, or **Edit description** to reopen saved draft text. Hiding it preserves the text for submission. Choose date/time, reminder offset, duration, and no repeat or daily/weekly/monthly/yearly repeat. Saving requires connectivity and automatically syncs the new event. Invalid time zones and nonexistent DST times are rejected.
 - **Agenda** shows compact green next-alarm and blue next-event tiles side by side, ordered by time with the earlier one on the left (alarm first for equal times, tiles without a time last), with times shown in the phone’s current time zone and countdowns. The next event stays visible after its reminder, until its deadline. Tap the magnifying glass to the left of refresh to search titles, descriptions, or groups. Clear the search to restore the full list. Compact event rows expand when tapped. Rows sort by the displayed deadline ascending; events without a future occurrence use their original date, including past events under All. Equal dates sort by title and record ID. Date headings include the year; events on the same phone-local date share a subtle border color. A six-color palette cycles across dates. Always check the year when similarly named dates appear in different years. Filter by Upcoming, Today (phone time zone), Groups, or All.
 - Tap an event card for its description, reminder offset, recurrence rule, or an explanation of disabled/invalid reminders. Use All to inspect past events and events without a valid next occurrence.
+- **Delete event** appears in expanded details for your private events and groups you own/administer. Tap refresh once after installing this feature to load action permissions. Confirmation explains that recurring deletion removes the entire series and shared deletion removes the event for all members. Deletion requires connectivity; after PocketBase confirms success, the app removes its local copy and cancels its future reminders. Other devices learn of deletion on their next successful sync. A normal group member cannot delete an event, even if they originally created it.
 - **Alarms** brings permission setup, the 30-second sound test, and delivery timing together.
 - **Account** shows the connected account, private/shared event counts, manual sync, and sign-out.
-- Light and dark appearances follow the phone setting. Editing existing events and managing groups remain in PocketBase.
+- Light and dark appearances follow the phone setting. Editing existing event details and managing groups remain in PocketBase.
 
 ## Try on the phone
 
@@ -35,7 +36,7 @@ Never put account passwords, access tokens, local SDK paths, or signing keys int
 
 ## Time zones and visibility
 
-The creation form initially uses the phone’s current IANA time zone. You can change it before saving, for example for a meeting tied to another country. The chosen local time is converted to UTC for PocketBase’s `start_at`; `timezone` stores the zone used for recurrence. New times inside a daylight-saving gap are rejected; an ambiguous overlap uses the earlier offset.
+The creation form automatically uses the phone’s current IANA time zone at save time. There is no time-zone field or separate configuration to maintain. To create an event explicitly tied to another zone, use PocketBase. The chosen local time is converted to UTC for PocketBase’s `start_at`; `timezone` stores the zone used for recurrence. New times inside a daylight-saving gap are rejected; an ambiguous overlap uses the earlier offset.
 
 Tiles, compact rows, and Today filtering use the phone’s current zone. Expanded details also show the saved event-zone time when it differs. Changing the phone’s zone changes the display, not an existing event’s stored start or recurrence zone.
 
@@ -63,13 +64,13 @@ python backend/pocketbase-tests/recurrence_fixtures.py
 
 ## Current limits
 
-All-day events can be inspected under **All** but are **not scheduled** until an all-day reminder-time policy is defined. The APK creates private timed events; editing existing events, creating group events, managing memberships, and changing personal reminder preferences remain in PocketBase.
+All-day events can be inspected under **All** but are **not scheduled** until an all-day reminder-time policy is defined. The APK creates private timed events; editing existing event details, creating group events, managing memberships, and changing personal reminder preferences remain in PocketBase.
 
 Sync runs on sign-in, after event creation, or explicitly through refresh/**Sync now**. There is no periodic background sync yet. Offline devices retain their last known access until the next successful sync. Exact-alarm availability, notification/channel settings, DND, alarm volume, OEM background restrictions, and force-stop behavior affect delivery. Alarm audio uses the alarm stream rather than the notification stream. The lock-screen Dismiss screen uses a full-screen intent with user-controlled access; without that access, tap the alarm notification or its Dismiss action. Alarm volume and DND still apply. Overlapping alarms share one player and Dismiss control, with the latest title shown.
 
 ## Build and verify
 
-Latest feature verification on October 20, 2026: **19 unit tests and five navigation/form UI tests passed** on the connected Android 16 phone. Build and lint passed. A temporary creation payload was accepted and read back from the live backend, then that exact test record was deleted. These checks do not replace audible alarm, offline, or reboot testing.
+Latest feature verification on October 21, 2026: **21 unit tests, seven navigation/form UI tests, and one isolated cache-deletion test passed** on the connected Android 16 phone. Build and lint passed. A temporary creation payload was accepted and read back from the live backend, then that exact test record was deleted. These checks do not replace audible alarm, offline, or reboot testing.
 
 Use Android Studio's configured JDK/SDK and the committed Gradle wrapper:
 
@@ -95,6 +96,6 @@ This uses synthetic events and callbacks; it does not authenticate or create bac
 
 Room uses Java entities/DAO and the Room Java annotation processor, avoiding a separate Kotlin code-generation plugin with AGP's built-in Kotlin support.
 
-Unit tests cover phone-zone defaults, explicit zone conversion, deadline visibility after reminders, UTC timestamps, reminder offsets, shared recurrence fixtures, DST gaps/overlaps, finite schedules, malformed data, migration safeguards, and offline advancement. Phone tests cover Room replacement, encrypted session round-trip/clear, TLS health connectivity to PocketBase, Compose screen rendering, toolbar search/reset, chronological summary tiles, event creation defaults/submission, compact row expansion, and a separate version-1 cache migration fixture. Tests use isolated storage, make no authenticated backend requests, and do not create backend data. User sign-in and actual audible/offline/reboot behavior need manual phone verification with permissions granted.
+Unit tests cover private/group deletion permission hints, phone-zone defaults, explicit zone conversion, deadline visibility after reminders, UTC timestamps, reminder offsets, shared recurrence fixtures, DST gaps/overlaps, finite schedules, malformed data, migration safeguards, and offline advancement. Phone tests cover Room replacement, encrypted session round-trip/clear, TLS health connectivity to PocketBase, Compose screen rendering, toolbar search/reset, chronological summary tiles, event creation defaults/submission, compact row expansion, deletion confirmation/cancellation, member-only restrictions, targeted cache deletion, and a separate version-1 cache migration fixture. Tests use isolated storage, make no authenticated backend requests, and do not create backend data. User sign-in and actual audible/offline/reboot behavior need manual phone verification with permissions granted.
 
 Test diagnostics use the `TokiAlarmTiming` logcat tag (target, delivery, audio-start timestamps only; no event titles or credentials). After returning to the app, the last test delivery delay is shown. Alarm-clock scheduling replaces allow-while-idle scheduling to avoid its closely-spaced-alarm throttling.

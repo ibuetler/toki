@@ -24,6 +24,17 @@ class TokiDeviceTest {
             assertEquals("Group event", db.deadlines().find("retained").title)
         } finally { db.close() }
     }
+    @Test fun deletingOneCachedEventPreservesOthers() {
+        val context = InstrumentationRegistry.getInstrumentation().context
+        val db = Room.inMemoryDatabaseBuilder(context, TokiDatabase::class.java).build()
+        try {
+            db.deadlines().insert(listOf(Deadline().apply { id = "delete-me" }, Deadline().apply { id = "keep-me" }))
+            db.deadlines().delete("delete-me")
+            assertNull(db.deadlines().find("delete-me"))
+            assertNotNull(db.deadlines().find("keep-me"))
+            assertEquals(1, db.deadlines().all().size)
+        } finally { db.close() }
+    }
     @Test fun sessionUsesEncryptedStorageAndCanBeCleared() {
         // Separate preference namespace, using the process's actual storage UID.
         val context = object : android.content.ContextWrapper(InstrumentationRegistry.getInstrumentation().targetContext) {
