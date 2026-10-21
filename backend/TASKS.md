@@ -1,6 +1,6 @@
 # Lightweight tasks
 
-Tasks capture short-lived thoughts without replacing JIRA. Each task belongs to one user; there are no assignments, workflows, subtasks, or shared tasks.
+Tasks capture short-lived thoughts without replacing JIRA. Android’s global search includes task titles and notes, including completed tasks, alongside events and birthdays. Each task belongs to one user; there are no assignments, workflows, subtasks, or shared tasks.
 
 ## Schema
 

@@ -15,14 +15,20 @@ import java.io.File
 /** Synthetic UI data: never reads sessions, accesses the backend, or schedules alarms. */
 class TokiNavigationTest {
     @get:Rule val screen = createComposeRule()
-    private fun render(dark: Boolean = false, reminded: Boolean = false, includePast: Boolean = false, includeBirthday: Boolean = false, birthdaysAvailable: Boolean = true, onCreate: (com.hackinglab.toki.data.NewEvent) -> Unit = {}, onDelete: (String) -> Unit = {}, onEdit: (String) -> Unit = {}, tasks: List<com.hackinglab.toki.data.TokiTask> = emptyList(), onSaveTask: (com.hackinglab.toki.data.TaskDraft, String?) -> Unit = { _, _ -> }, onCompleteTask: (String, Boolean) -> Unit = { _, _ -> }) {
+    private fun render(dark: Boolean = false, longLists: Boolean = false, reminded: Boolean = false, includePast: Boolean = false, includeBirthday: Boolean = false, birthdaysAvailable: Boolean = true, onCreate: (com.hackinglab.toki.data.NewEvent) -> Unit = {}, onDelete: (String) -> Unit = {}, onEdit: (String) -> Unit = {}, tasks: List<com.hackinglab.toki.data.TokiTask> = emptyList(), onSaveTask: (com.hackinglab.toki.data.TaskDraft, String?) -> Unit = { _, _ -> }, onCompleteTask: (String, Boolean) -> Unit = { _, _ -> }) {
         val start = System.currentTimeMillis() + 3_600_000
         val events = listOf(
             Deadline().apply { id = "one"; title = "Project milestone"; timezone = "Europe/Zurich"; enabled = true; reminderMinutes = if (reminded) 120 else 0; startMillis = start },
             Deadline().apply { id = "two"; title = "Family birthday"; groupName = "Family"; timezone = "Europe/Zurich"; enabled = false; startMillis = start + 86_400_000 }
-        ).reversed() + if (includePast) listOf(Deadline().apply { id = "past"; title = "Earlier deadline"; timezone = "Europe/Zurich"; startMillis = start - 7_200_000 }) else emptyList()
+        ).reversed() + if (includePast) listOf(Deadline().apply { id = "past"; enabled = true; title = "Earlier deadline"; timezone = "Europe/Zurich"; startMillis = start - 7_200_000 }) else emptyList()
         val birthday = com.hackinglab.toki.data.BirthdaySpec(java.time.LocalDate.now().monthValue, java.time.LocalDate.now().dayOfMonth, 2000).deadline("Alex", "", true).apply { id = "birthday:fixture" }
-        val records = events + if (includeBirthday) listOf(birthday) else emptyList()
+        val extraEvents = if (longLists) (0..29).map { index -> Deadline().apply {
+            id = "extra$index"; title = "Future event $index"; timezone = "Europe/Zurich"; enabled = true; startMillis = start + (index + 2) * 86_400_000L
+        } } else emptyList()
+        val extraBirthdays = if (longLists) (0..29).map { index ->
+            com.hackinglab.toki.data.BirthdaySpec(java.time.LocalDate.now().monthValue, java.time.LocalDate.now().dayOfMonth).deadline("Birthday $index", "", true).apply { id = "birthday:extra$index" }
+        } else emptyList()
+        val records = events + extraEvents + (if (includeBirthday) listOf(birthday) + extraBirthdays else emptyList())
         screen.setContent {
             val view = androidx.compose.ui.platform.LocalView.current
             androidx.compose.runtime.DisposableEffect(view) {
@@ -129,20 +135,81 @@ class TokiNavigationTest {
         org.junit.Assert.assertTrue(screen.onNodeWithTag("next-alarm-tile").fetchSemanticsNode().boundsInRoot.left <
             screen.onNodeWithTag("next-event-tile").fetchSemanticsNode().boundsInRoot.left)
         snapshot("toki-agenda.png")
-        screen.onNodeWithText("Title, description or group").assertDoesNotExist()
-        screen.onNodeWithContentDescription("Search events").performClick()
-        screen.onNodeWithText("Title, description or group").performTextInput("Family")
-        screen.onNodeWithText("Show results").performClick()
-        screen.onNodeWithText("1 event").performScrollTo().assertIsDisplayed()
-        screen.onNodeWithText("Family birthday").performScrollTo().performClick()
-        screen.onNodeWithText("Off").assertIsDisplayed()
-        screen.onNodeWithText("Clear search").performScrollTo().performClick()
+        screen.onNodeWithText("Search events, birthdays and tasks").assertDoesNotExist()
+        screen.onNodeWithContentDescription("Search TOKI").performClick()
+        screen.onNodeWithText("Search events, birthdays and tasks").performTextInput("Family")
+        screen.onNodeWithText("1 result").assertExists()
+        screen.onNodeWithText("Clear").performClick()
+        screen.onNodeWithTag("search-event:two").assertDoesNotExist()
+        screen.onNodeWithText("Search events, birthdays and tasks").performTextInput("Family")
+        screen.onNodeWithTag("search-event:two").performScrollTo().performClick()
         screen.onNodeWithText("2 events").performScrollTo().assertIsDisplayed()
+        screen.onNodeWithText("Off").assertExists()
         screen.onNodeWithText("Alarms", useUnmergedTree = true).performClick()
         screen.onNodeWithText("Alarms, on your terms.").assertIsDisplayed()
         snapshot("toki-alarms.png")
         screen.onNodeWithText("Account", useUnmergedTree = true).performClick()
         screen.onNodeWithText("hello@example.com").assertIsDisplayed()
+    }
+    @Test fun globalSearchOpensBirthdaysAndCompletedTasksFromAnyList() {
+        val task = com.hackinglab.toki.data.TokiTask().apply { id = "done"; title = "Alex checklist"; notes = "Hidden note"; completed = true }
+        render(includeBirthday = true, tasks = listOf(task))
+        screen.onNodeWithText("Tasks", useUnmergedTree = true).performScrollTo().performClick()
+        screen.onNodeWithTag("agenda-content").performScrollToNode(hasContentDescription("Search TOKI"))
+        screen.onNodeWithContentDescription("Search TOKI").performClick()
+        screen.onNodeWithText("Search events, birthdays and tasks").performTextInput("Alex")
+        screen.onNodeWithText("2 results").assertExists()
+        screen.onNodeWithText("Task · Completed · Normal").assertExists()
+        screen.onNodeWithTag("search-task:done").performScrollTo().performClick()
+        screen.onNodeWithText("Edit task").performScrollTo().assertIsDisplayed()
+        screen.onNodeWithContentDescription("Reopen Alex checklist").assertExists()
+        screen.onNodeWithTag("agenda-content").performScrollToNode(hasContentDescription("Search TOKI"))
+        screen.onNodeWithContentDescription("Search TOKI").performClick()
+        screen.onNodeWithText("Search events, birthdays and tasks").performTextInput("Alex")
+        screen.onNodeWithTag("search-birthday:birthday:fixture").performScrollTo().performClick()
+        screen.onNodeWithTag("event-birthday:fixture").assertExists()
+        screen.onNodeWithText("The reminder time has passed. This birthday stays here all day.").performScrollTo().assertIsDisplayed()
+    }
+    @Test fun globalSearchFindsPastEventAndReturnsToUnfilteredList() {
+        render(includePast = true)
+        screen.onNodeWithContentDescription("Search TOKI").performClick()
+        screen.onNodeWithText("Search events, birthdays and tasks").performTextInput("Earlier")
+        screen.onNodeWithTag("search-event:past").performScrollTo().performClick()
+        screen.onNodeWithText("This event has no future deadline.").performScrollTo().assertIsDisplayed()
+        screen.onNodeWithTag("event-past").assertExists()
+    }
+    @Test fun globalSearchScrollsToTaskBeyondVisibleRows() {
+        val tasks = (0..39).map { index -> com.hackinglab.toki.data.TokiTask().apply {
+            id = "fixture-$index"; title = "Thought $index"; createdMillis = index.toLong(); notes = if (index == 0) "Unique needle" else ""
+        } }
+        render(tasks = tasks)
+        screen.onNodeWithContentDescription("Search TOKI").performClick()
+        screen.onNodeWithText("Search events, birthdays and tasks").performTextInput("needle")
+        screen.onNodeWithTag("search-task:fixture-0").performScrollTo().performClick()
+        screen.onNodeWithTag("task-fixture-0").assertIsDisplayed()
+        screen.onNodeWithText("Unique needle").assertExists()
+    }
+    @Test fun backToTopAppearsAfterScrollingAndPreservesSelectedList() {
+        val tasks = (0..29).map { index -> com.hackinglab.toki.data.TokiTask().apply { id = "fixture$index"; title = "Task $index"; createdMillis = index.toLong() } }
+        render(includeBirthday = true, longLists = true, tasks = tasks)
+        screen.onNodeWithContentDescription("Back to top").assertDoesNotExist()
+        screen.onNodeWithText("Birthdays").performScrollTo().performClick()
+        screen.onNodeWithTag("agenda-content").performScrollToNode(hasTestTag("event-birthday:extra29"))
+        snapshot("toki-back-to-top.png")
+        screen.onNodeWithContentDescription("Back to top").assertIsDisplayed().performClick()
+        screen.onNodeWithTag("next-event-tile").assertIsDisplayed()
+        screen.onNodeWithContentDescription("Back to top").assertDoesNotExist()
+        screen.onNodeWithText("+  New birthday").assertIsDisplayed()
+        screen.onNodeWithText("Tasks", useUnmergedTree = true).performScrollTo().performClick()
+        screen.onNodeWithTag("agenda-content").performScrollToNode(hasTestTag("task-fixture0"))
+        screen.onNodeWithContentDescription("Back to top").performClick()
+        screen.onNodeWithTag("next-event-tile").assertIsDisplayed()
+        screen.onNodeWithText("+  New task").assertIsDisplayed()
+        screen.onNodeWithText("Events").performScrollTo().performClick()
+        screen.onNodeWithTag("agenda-content").performScrollToNode(hasTestTag("event-extra29"))
+        screen.onNodeWithContentDescription("Back to top").performClick()
+        screen.onNodeWithTag("next-event-tile").assertIsDisplayed()
+        screen.onNodeWithText("+  New event").assertIsDisplayed()
     }
     @Test fun newEventDefaultsAndSubmission() {
         var saved: com.hackinglab.toki.data.NewEvent? = null

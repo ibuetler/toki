@@ -74,7 +74,7 @@ This excludes November 2 and adds November 4 at 09:00 local time. These exceptio
 3. In **Agenda**, tap **+ New event** to create a private event. Enabled, a five-minute reminder, a 60-minute duration, and the phone’s time zone are the defaults. The initial date/time is one hour ahead. Saving requires a connection and automatically syncs the event.
 4. The green **Next alarm** and blue **Next event** tiles show the earlier time on the left. After an alarm, the event stays visible as **Due soon** until its deadline. Past one-off events remain under **All**.
 5. To delete an event, refresh once to load permissions, expand its row, tap **Delete event**, and confirm. Recurring deletion removes the entire series; shared events are deleted for everyone and require group owner/admin rights.
-6. Use the magnifying glass left of refresh to search; tap a compact event row for details. **Today** uses the phone’s date. Refresh after changes made in PocketBase.
+6. Use the magnifying glass left of refresh to search all cached events, birthdays and tasks, including completed tasks; select a result to open its list and details. Tap a compact event row for details. **Today** uses the phone’s date. Refresh after changes made in PocketBase.
 
 Expand an event and tap **Edit event** to update a regular event or birthday in Android; saving syncs changes and rebuilds reminders. Group event creation, memberships, and personal reminder preferences are managed in PocketBase. Background sync and all-day alarms are not implemented. See the [Android guide](android/README.md) for limitations and troubleshooting.
 
