@@ -23,10 +23,10 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 @Composable
-internal fun NewEventScreen(busy: Boolean, serverError: String?, onClose: () -> Unit, onSave: (NewEvent) -> Unit, birthdaysAvailable: Boolean = true, edit: com.hackinglab.toki.data.EditableEvent? = null) {
+internal fun NewEventScreen(busy: Boolean, serverError: String?, onClose: () -> Unit, onSave: (NewEvent) -> Unit, birthdaysAvailable: Boolean = true, edit: com.hackinglab.toki.data.EditableEvent? = null, birthday: Boolean = false) {
     val draft = edit?.original
     val initial = remember { draft?.localStart ?: LocalDateTime.now(ZoneId.systemDefault()).plusHours(1).withSecond(0).withNano(0) }
-    var birthdayMode by rememberSaveable { mutableStateOf(draft?.birthday != null) }
+    val birthdayMode = if (edit != null) draft?.birthday != null else birthday
     var birthdayDate by rememberSaveable { mutableStateOf(draft?.birthday?.let { "${it.day}.${it.month}" + if (it.birthYear > 0) ".${it.birthYear}" else "" } ?: "") }
     var birthdayTime by rememberSaveable { mutableStateOf(draft?.birthday?.let { LocalTime.of(it.hour, it.minute).toString() } ?: "09:00") }
     var leapPolicy by rememberSaveable { mutableStateOf(draft?.birthday?.leapDayPolicy ?: "feb28") }
@@ -46,14 +46,10 @@ internal fun NewEventScreen(busy: Boolean, serverError: String?, onClose: () -> 
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             LazyColumn(Modifier.fillMaxSize().testTag("new-event-form").systemBarsPadding().imePadding(), contentPadding = PaddingValues(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(if (edit != null) "Edit event" else "New event", style = MaterialTheme.typography.headlineMedium)
+                    Text(if (edit != null) "Edit event" else if (birthdayMode) "New birthday" else "New event", style = MaterialTheme.typography.headlineMedium)
                     TextButton(onClick = onClose, enabled = !busy) { Text("Cancel") }
                 } }
-                if (edit == null) item { Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(selected = !birthdayMode, onClick = { birthdayMode = false }, enabled = !busy, label = { Text("Event") })
-                    FilterChip(selected = birthdayMode, onClick = { birthdayMode = true }, enabled = !busy && birthdaysAvailable, label = { Text("Birthday") })
-                } }
-                if (!birthdaysAvailable) item { Text("Birthday setup is pending on the backend. Tap Sync after the migration is installed.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                if (birthdayMode && !birthdaysAvailable) item { Text("Birthday setup is pending on the backend. Tap Sync after setup.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 item { Text(if (edit?.shared == true) "Changes apply to everyone in this group. Personal reminder overrides stay unchanged." else if (birthdayMode) "A birthday, remembered every year." else if (edit != null) "Update this event and its future reminders." else "A private event, just for you.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 if (edit != null && (birthdayMode || draft?.rrule?.isNotBlank() == true)) item { Text("Changes apply to the entire recurring series.", style = MaterialTheme.typography.bodySmall) }
                 item { OutlinedTextField(title, { title = it }, label = { Text(if (birthdayMode) "Name" else "Title") }, singleLine = true, enabled = !busy, modifier = Modifier.fillMaxWidth()) }
@@ -129,7 +125,7 @@ internal fun NewEventScreen(busy: Boolean, serverError: String?, onClose: () -> 
                         error = null
                         onSave(draft)
                     } catch (e: IllegalArgumentException) { error = e.message }
-                }, enabled = !busy && title.isNotBlank(), modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(if (busy) "Saving…" else if (edit != null) "Save changes" else if (birthdayMode) "Create birthday" else "Create event") } }
+                }, enabled = !busy && title.isNotBlank() && (!birthdayMode || birthdaysAvailable), modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(if (busy) "Saving…" else if (edit != null) "Save changes" else if (birthdayMode) "Create birthday" else "Create event") } }
                 item { Text("An internet connection is needed to save. Your events will sync and reminders will be scheduled after saving.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
         }

@@ -63,9 +63,10 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
     state.editing?.let { edit ->
         key(edit.id) { NewEventScreen(state.busy, state.editError, onCloseEdit, onUpdate, state.birthdaysAvailable, edit) }
     }
+    var creatingBirthday by rememberSaveable { mutableStateOf(false) }
     var creating by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(state.createdVersion) { creating = false }
-    if (creating && state.session != null) NewEventScreen(state.busy, state.createError, { creating = false }, onCreate, state.birthdaysAvailable)
+    if (creating && state.session != null) NewEventScreen(state.busy, state.createError, { creating = false }, onCreate, state.birthdaysAvailable, birthday = creatingBirthday)
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var taskList by rememberSaveable { mutableStateOf(false) }
     var completedTasks by rememberSaveable { mutableStateOf(false) }
@@ -121,8 +122,8 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
     }.minByOrNull { it.second }
     Scaffold(containerColor = MaterialTheme.colorScheme.background,
         floatingActionButton = {
-            if (signedIn && tab == 0) ExtendedFloatingActionButton(onClick = { if (!state.busy) { if (taskList) { if (state.tasksAvailable) { editingTaskId = null; onClearTaskError(); taskForm = true } } else creating = true } },
-                containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary) { Text(if (taskList) "+  New task" else "+  New event") }
+            if (signedIn && tab == 0) ExtendedFloatingActionButton(onClick = { if (!state.busy) { if (taskList) { if (state.tasksAvailable) { editingTaskId = null; onClearTaskError(); taskForm = true } } else { creatingBirthday = birthdayList; creating = true } } },
+                containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary) { Text(if (taskList) "+  New task" else if (birthdayList) "+  New birthday" else "+  New event") }
         },
         bottomBar = {
             if (signedIn) NavigationBar(containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 0.dp) {

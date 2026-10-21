@@ -148,6 +148,9 @@ class TokiNavigationTest {
         var saved: com.hackinglab.toki.data.NewEvent? = null
         render(onCreate = { saved = it })
         screen.onNodeWithText("+  New event").performClick()
+        screen.onNodeWithText("Birthday").assertDoesNotExist()
+        screen.onNodeWithText("Event", substring = false).assertDoesNotExist()
+        screen.onNodeWithText("Birth date").assertDoesNotExist()
         screen.onNodeWithText("Time zone").assertDoesNotExist()
         screen.onNode(hasText(java.time.ZoneId.systemDefault().id) and hasSetTextAction()).assertDoesNotExist()
         screen.onNodeWithTag("new-event-form").performScrollToNode(hasText("Create event"))
@@ -211,8 +214,10 @@ class TokiNavigationTest {
     @Test fun birthdayFormUsesNineAndUnknownAgeByDefault() {
         var saved: com.hackinglab.toki.data.NewEvent? = null
         render(onCreate = { saved = it })
-        screen.onNodeWithText("+  New event").performClick()
-        screen.onNodeWithText("Birthday").performClick()
+        screen.onNodeWithText("Birthdays").performScrollTo().performClick()
+        screen.onNodeWithText("+  New birthday").performClick()
+        screen.onNodeWithText("New birthday").assertIsDisplayed()
+        screen.onNodeWithText("Title").assertDoesNotExist()
         screen.onNodeWithText("Name").performTextInput("Alex")
         screen.onNodeWithText("Birth date").performTextInput("29.2")
         screen.onNodeWithTag("new-event-form").performScrollToNode(hasText("March 1"))
@@ -235,8 +240,10 @@ class TokiNavigationTest {
     @Test fun europeanBirthDateSubmitsCorrectDayMonthAndYear() {
         var saved: com.hackinglab.toki.data.NewEvent? = null
         render(onCreate = { saved = it })
-        screen.onNodeWithText("+  New event").performClick()
-        screen.onNodeWithText("Birthday").performClick()
+        screen.onNodeWithText("Birthdays").performScrollTo().performClick()
+        screen.onNodeWithText("+  New birthday").performClick()
+        screen.onNodeWithText("New birthday").assertIsDisplayed()
+        screen.onNodeWithText("Title").assertDoesNotExist()
         screen.onNodeWithText("Name").performTextInput("Alex")
         screen.onNodeWithText("Birth date").performTextInput("8.10.1968")
         screen.onNodeWithTag("new-event-form").performScrollToNode(hasText("Create birthday"))
@@ -263,8 +270,14 @@ class TokiNavigationTest {
     @Test fun oldBackendKeepsEventsAvailableButBirthdayCreationDisabled() {
         render(birthdaysAvailable = false)
         screen.onNodeWithText("+  New event").performClick()
-        screen.onNodeWithText("Birthday").assertIsNotEnabled()
         screen.onNodeWithText("Title").assertIsDisplayed()
+        screen.onNodeWithText("Birthday").assertDoesNotExist()
+        screen.onNodeWithText("Cancel").performClick()
+        screen.onNodeWithText("Birthdays").performScrollTo().performClick()
+        screen.onNodeWithText("+  New birthday").performClick()
+        screen.onNodeWithText("Name").performTextInput("Alex")
+        screen.onNodeWithTag("new-event-form").performScrollToNode(hasText("Create birthday"))
+        screen.onNodeWithText("Create birthday").assertIsNotEnabled()
     }
     @Test fun darkAgendaRenders() { render(true); screen.onNodeWithText("NEXT ALARM").assertIsDisplayed(); snapshot("toki-dark.png") }
 }

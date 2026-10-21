@@ -2,6 +2,9 @@ package com.hackinglab.toki
 
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -34,21 +37,39 @@ private fun taskDate(millis: Long): String = DateTimeFormatter.ofPattern("d MMM 
 @Composable internal fun TaskCard(task: TokiTask, busy: Boolean, now: Long, onComplete: (Boolean) -> Unit, onEdit: () -> Unit, onDelete: () -> Unit) {
     var expanded by rememberSaveable(task.id) { mutableStateOf(false) }
     Card(onClick = { expanded = !expanded }, modifier = Modifier.fillMaxWidth().testTag("task-${task.id}"),
-        border = BorderStroke(1.dp, priorityColor(task.priority).copy(alpha = .65f))) {
-        Column(Modifier.padding(10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+        shape = MaterialTheme.shapes.small, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.5.dp, priorityColor(task.priority))) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(Modifier.heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Checkbox(checked = task.completed, onCheckedChange = onComplete, enabled = !busy,
                     modifier = Modifier.semantics { contentDescription = if (task.completed) "Reopen ${task.title}" else "Complete ${task.title}" })
-                Column(Modifier.weight(1f)) {
-                    Text(task.title, maxLines = if (expanded) Int.MAX_VALUE else 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleSmall)
-                    Text(task.priority.replaceFirstChar { it.uppercase() }, color = priorityColor(task.priority), style = MaterialTheme.typography.labelSmall)
-                    if (task.reminderMillis > 0 && !task.completed) Text(
-                        if (task.reminderMillis <= now) "Reminder time passed · still to do" else "Reminder ${taskDate(task.reminderMillis)}",
-                        style = MaterialTheme.typography.bodySmall)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(task.title, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(painterResource(R.drawable.ic_lock), contentDescription = null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.primary)
+                        Text("Private · " + when {
+                            task.completed -> "Completed"
+                            task.reminderMillis == 0L -> "No reminder"
+                            task.reminderMillis <= now -> "Reminder passed"
+                            else -> taskDate(task.reminderMillis)
+                        }, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+                Surface(color = priorityColor(task.priority).copy(alpha = .12f), shape = CircleShape) {
+                    Text(task.priority.replaceFirstChar { it.uppercase() }, Modifier.widthIn(max = 82.dp).padding(horizontal = 8.dp, vertical = 5.dp),
+                        color = priorityColor(task.priority), style = MaterialTheme.typography.labelSmall)
                 }
             }
             if (expanded) {
-                if (task.notes.isNotBlank()) Text(task.notes, Modifier.padding(horizontal = 8.dp, vertical = 6.dp), style = MaterialTheme.typography.bodyMedium)
+                HorizontalDivider()
+                Text(task.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                if (task.reminderMillis > 0) Text(
+                    if (task.completed) "Completed. Its reminder is cancelled."
+                    else if (task.reminderMillis <= now) "The reminder time has passed. This task stays active until you complete it."
+                    else "Reminder ${taskDate(task.reminderMillis)}", style = MaterialTheme.typography.bodyMedium)
+                if (task.notes.isNotBlank()) Text(task.notes, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row {
                     TextButton(onClick = onEdit, enabled = !busy) { Text("Edit task") }
                     TextButton(onClick = onDelete, enabled = !busy) { Text("Delete task", color = MaterialTheme.colorScheme.error) }
@@ -69,7 +90,7 @@ private fun taskDate(millis: Long): String = DateTimeFormatter.ofPattern("d MMM 
     Dialog(onDismissRequest = { if (!busy) onClose() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             LazyColumn(Modifier.fillMaxSize().systemBarsPadding().imePadding().testTag("task-form"),
-                contentPadding = PaddingValues(24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                contentPadding = PaddingValues(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(if (task == null) "New task" else "Edit task", style = MaterialTheme.typography.headlineMedium)
                     TextButton(onClick = onClose, enabled = !busy) { Text("Cancel") }
