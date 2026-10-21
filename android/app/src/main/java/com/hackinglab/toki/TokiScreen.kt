@@ -50,9 +50,9 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
     var deletingId by rememberSaveable { mutableStateOf<String?>(null) }
     state.deadlines.find { it.id == deletingId }?.let { event ->
         AlertDialog(onDismissRequest = { deletingId = null },
-            title = { Text(if (event.rrule.isBlank()) "Delete event?" else "Delete recurring event?") },
+            title = { Text(if (event.rrule.isBlank() && event.kind != "birthday") "Delete event?" else "Delete recurring event?") },
             text = { Text("Delete “${event.title}” permanently?" +
-                (if (event.rrule.isNotBlank()) " This deletes the entire series, including all future occurrences." else "") +
+                (if (event.rrule.isNotBlank() || event.kind == "birthday") " This deletes the entire series, including all future occurrences." else "") +
                 (if (event.groupName.isNotBlank()) " It will be removed for everyone in ${event.groupName}." else "") +
                 " Future reminders on this phone will be cancelled. This cannot be undone.") },
             confirmButton = { TextButton(onClick = { deletingId = null; onDelete(event.id) }, enabled = !state.busy && event.id in state.deletableIds) {
@@ -62,8 +62,9 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
     }
     var creating by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(state.createdVersion) { creating = false }
-    if (creating && state.session != null) NewEventScreen(state.busy, state.createError, { creating = false }, onCreate)
+    if (creating && state.session != null) NewEventScreen(state.busy, state.createError, { creating = false }, onCreate, state.birthdaysAvailable)
     var tab by rememberSaveable { mutableIntStateOf(0) }
+    var birthdayList by rememberSaveable { mutableStateOf(false) }
     var filter by rememberSaveable { mutableStateOf("Upcoming") }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
@@ -83,18 +84,21 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
     val visible = state.deadlines.filter { event ->
         val next = state.previews[event.id]?.nextStart
         val search = query.isBlank() || listOf(event.title, event.groupName, event.description).any { it.contains(query, true) }
-        search && when (filter) {
+        search && (if (birthdayList) event.kind == "birthday" else event.kind != "birthday") && when (filter) {
             "Today" -> next != null && Instant.ofEpochMilli(next).atZone(ZoneId.systemDefault()).toLocalDate() == Instant.ofEpochMilli(now).atZone(ZoneId.systemDefault()).toLocalDate()
             "Groups" -> event.groupName.isNotBlank()
-            "Upcoming" -> next != null && next > now
+            "Upcoming" -> next != null && (state.previews[event.id]?.visibleUntil ?: next) > now
             else -> true
         }
     }.sortedWith(compareBy<Deadline> { state.previews[it.id]?.nextStart ?: it.startMillis }.thenBy { it.title.lowercase() }.thenBy { it.id })
     val next = state.deadlines.filter { it.enabled && state.previews[it.id]?.problem == null }
         .mapNotNull { e -> state.previews[e.id]?.let { it.nextReminderStart ?: it.nextStart }?.let { start -> e to EventTime.reminderAt(start, e.reminderMinutes) } }
         .filter { it.second > now }.minByOrNull { it.second }
-    val nextEvent = state.deadlines.mapNotNull { event ->
-        state.previews[event.id]?.nextStart?.takeIf { it > now }?.let { event to it }
+    val nextEvent = state.deadlines.filter { it.kind != "birthday" }.mapNotNull { event ->
+        state.previews[event.id]?.let { preview -> preview.nextStart?.takeIf { (preview.visibleUntil ?: it) > now }?.let { event to it } }
+    }.minByOrNull { it.second }
+    val nextBirthday = state.deadlines.filter { it.kind == "birthday" && state.previews[it.id]?.problem == null }.mapNotNull { event ->
+        state.previews[event.id]?.let { preview -> preview.nextStart?.takeIf { (preview.visibleUntil ?: it) > now }?.let { event to it } }
     }.minByOrNull { it.second }
     Scaffold(containerColor = MaterialTheme.colorScheme.background,
         floatingActionButton = {
@@ -108,7 +112,7 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
                 }
             }
         }) { insets ->
-        LazyColumn(Modifier.fillMaxSize().padding(insets), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(if (signedIn && tab == 0) 8.dp else 20.dp)) {
+        LazyColumn(Modifier.fillMaxSize().testTag("agenda-content").padding(insets), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(if (signedIn && tab == 0) 8.dp else 20.dp)) {
             item {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                     Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -168,6 +172,7 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
                             } }
                         }
                     }
+                    item { BirthdayTile(nextBirthday, now) { birthdayList = true; filter = "Upcoming"; query = "" } }
                     if (!permissionReady || !state.fullScreenAllowed) item {
                         Surface(onClick = { tab = 1 }, shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.secondaryContainer) {
                             Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -183,14 +188,21 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
                             TextButton(onClick = { query = "" }) { Text("Clear search") }
                         }
                     }
-                    item { LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(listOf("Upcoming", "Today", "Groups", "All")) { option -> FilterChip(selected = filter == option, onClick = { filter = option }, label = { Text(option) }) }
-                    } }
                     item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("Your events", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                        Text("${visible.size} ${if (visible.size == 1) "event" else "events"}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        val noun = if (birthdayList) { if (visible.size == 1) "birthday" else "birthdays" } else { if (visible.size == 1) "event" else "events" }
+                        Text("${visible.size} $noun", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     } }
-                    if (visible.isEmpty()) item { EmptyEvents(query, filter, state.deadlines.isEmpty(), onSync) }
+                    item { PrimaryTabRow(selectedTabIndex = if (birthdayList) 1 else 0, containerColor = Color.Transparent) {
+                        Tab(selected = !birthdayList, onClick = { birthdayList = false; filter = "Upcoming" }, text = { Text("Events") })
+                        Tab(selected = birthdayList, onClick = { birthdayList = true; filter = "Upcoming" }, text = { Text("Birthdays") })
+                    } }
+                    item { LazyRow(Modifier.testTag("event-filters"), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(if (birthdayList) listOf("Upcoming", "Today", "All") else listOf("Upcoming", "Today", "Groups", "All")) { option ->
+                            FilterChip(selected = filter == option, onClick = { filter = option }, label = { Text(option) })
+                        }
+                    } }
+                    if (visible.isEmpty()) item { EmptyEvents(query, filter, state.deadlines.none { if (birthdayList) it.kind == "birthday" else it.kind != "birthday" }, onSync) }
                     itemsIndexed(visible, key = { _, event -> event.id }) { index, event ->
                         val start = state.previews[event.id]?.nextStart ?: event.startMillis
                         val day = Instant.ofEpochMilli(start).atZone(ZoneId.systemDefault()).toLocalDate()
@@ -213,7 +225,7 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
                     item { SectionTitle("Alarms, on your terms.", "Check permissions, try the sound, and feel ready.") }
                     item { AlarmSetup(state, now, onTest, onNotifications, onExact, onFullScreen) }
                     item { InfoCard("Built for the moments that matter", "Alarms use your alarm volume, ring until dismissed, and stop automatically after two minutes. Do Not Disturb and phone settings still apply.") }
-                    item { InfoCard("A note on all-day events", "Timed recurring alarms are supported. All-day events need a reminder time before they can ring.") }
+                    item { InfoCard("A note on all-day events", "Birthdays use their own local reminder time. Other all-day events need a reminder-time policy before they can ring.") }
                 }
                 else -> {
                     item { SectionTitle("Your space.", "Private plans and shared calendars, together.") }
@@ -244,26 +256,48 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
 }
 
 @Composable private fun SummaryTile(label: String, title: String, at: Long?, zone: String, now: Long,
-    colors: List<Color>, accent: Color, icon: Int, modifier: Modifier = Modifier, onClick: (() -> Unit)? = null) {
+    colors: List<Color>, accent: Color, icon: Int, modifier: Modifier = Modifier, dateOnly: Boolean = false, onClick: (() -> Unit)? = null) {
     val content: @Composable () -> Unit = {
         Column(Modifier.fillMaxSize().background(Brush.linearGradient(colors)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Glyph(icon, Modifier.size(16.dp), accent)
                 Text(label, color = accent, style = MaterialTheme.typography.labelSmall)
             }
-            Text(if (at == null) "—" else date(at, zone, "HH:mm"), color = Color.White,
+            Text(if (at == null) "—" else if (dateOnly) { if (date(at, zone, "yyyy-MM-dd") == date(now, zone, "yyyy-MM-dd")) "Today" else "Birthday" } else date(at, zone, "HH:mm"), color = Color.White,
                 style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             Text(title, color = Color.White, style = MaterialTheme.typography.titleSmall, maxLines = 2, minLines = 2, overflow = TextOverflow.Ellipsis)
             if (at != null) {
                 Text(date(at, zone, "EEE, d MMM"), color = accent, style = MaterialTheme.typography.labelSmall)
                 Text(zone, color = accent, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 val minutes = ((at - now + 59_999) / 60_000).coerceAtLeast(1)
-                Text(if (minutes < 60) "In $minutes min" else "In ${minutes / 60}h ${minutes % 60}m", color = Color.White, style = MaterialTheme.typography.labelMedium)
+                Text(if (dateOnly) "All day" else if (minutes < 60) "In $minutes min" else "In ${minutes / 60}h ${minutes % 60}m", color = Color.White, style = MaterialTheme.typography.labelMedium)
             } else Text(if (onClick != null) "Tap for alarm settings" else "You’re all caught up", color = accent, style = MaterialTheme.typography.labelSmall)
         }
     }
     if (onClick != null) Surface(onClick = onClick, modifier = modifier, shape = MaterialTheme.shapes.medium, color = colors.first(), content = content)
     else Surface(modifier = modifier, shape = MaterialTheme.shapes.medium, color = colors.first(), content = content)
+}
+
+@Composable private fun BirthdayTile(next: Pair<Deadline, Long>?, now: Long, onClick: () -> Unit) {
+    val accent = Color(0xFFF6D6F1)
+    Surface(onClick = onClick, modifier = Modifier.fillMaxWidth().testTag("next-birthday-tile"), shape = MaterialTheme.shapes.medium, color = Color(0xFF643663)) {
+        Row(Modifier.background(Brush.linearGradient(listOf(Color(0xFF513052), Color(0xFF89517E)))).padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Glyph(R.drawable.ic_cake, Modifier.size(28.dp), accent)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text("NEXT BIRTHDAY", color = accent, style = MaterialTheme.typography.labelSmall)
+                Text(next?.first?.title ?: "No upcoming birthdays", color = Color.White, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (next != null) Text(date(next.second, pattern = "EEE, d MMM yyyy"), color = accent, style = MaterialTheme.typography.labelSmall)
+            }
+            if (next != null) Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                val zone = ZoneId.systemDefault()
+                val days = java.time.temporal.ChronoUnit.DAYS.between(Instant.ofEpochMilli(now).atZone(zone).toLocalDate(), Instant.ofEpochMilli(next.second).atZone(zone).toLocalDate())
+                Text(if (days <= 0) "Today" else "In $days ${if (days == 1L) "day" else "days"}", color = Color.White, style = MaterialTheme.typography.labelMedium)
+                val age = com.hackinglab.toki.data.BirthdaySpec.from(next.first).ageOn(next.second)
+                if (age != null) Text("Turns $age", color = accent, style = MaterialTheme.typography.labelSmall)
+            } else Glyph(R.drawable.ic_arrow, tint = accent)
+        }
+    }
 }
 
 @Composable private fun LoginCard(busy: Boolean, onLogin: (String, String) -> Unit) {
@@ -331,20 +365,21 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
     var expanded by rememberSaveable(event.id) { mutableStateOf(false) }
     val time = preview?.nextStart ?: event.startMillis
     val reminderPassed = preview?.nextStart != null && EventTime.reminderAt(preview.nextStart, event.reminderMinutes) <= now
-    val status = when { !event.enabled -> "Off"; preview?.problem != null -> "Needs attention"; preview?.nextStart == null -> "Finished"; reminderPassed -> "Due soon"; !permissionsReady -> "Setup needed"; else -> "Alarm on" }
+    val status = when { !event.enabled -> "Off"; preview?.problem != null -> "Needs attention"; preview?.nextStart == null -> "Finished"; reminderPassed -> if (event.kind == "birthday") "Today" else "Due soon"; !permissionsReady -> "Setup needed"; else -> "Alarm on" }
     val active = status == "Alarm on"
     Card(border = BorderStroke(1.5.dp, dateColor), modifier = Modifier.testTag("event-${event.id}"), shape = MaterialTheme.shapes.small, onClick = { expanded = !expanded }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(Modifier.heightIn(min = 48.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.widthIn(min = 50.dp)) {
-                    Text(date(time, pattern = "HH:mm"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    if (event.kind == "birthday") Glyph(R.drawable.ic_cake, Modifier.size(24.dp))
+                    else Text(date(time, pattern = "HH:mm"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Text(date(time, pattern = if (Instant.ofEpochMilli(time).atZone(ZoneId.systemDefault()).year == Instant.ofEpochMilli(now).atZone(ZoneId.systemDefault()).year) "d MMM" else "d MMM yy"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(event.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                         Glyph(if (event.groupName.isBlank()) R.drawable.ic_lock else R.drawable.ic_group, Modifier.size(12.dp))
-                        Text("${event.groupName.ifBlank { "Private" }} · ${if (event.rrule.isBlank()) "One-time" else repeatLabel(event.rrule)}",
+                        Text("${event.groupName.ifBlank { "Private" }} · ${if (event.kind == "birthday") "Yearly" else if (event.rrule.isBlank()) "One-time" else repeatLabel(event.rrule)}",
                             style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
@@ -355,14 +390,22 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
             if (expanded) {
                 HorizontalDivider()
                 Text(event.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                if (event.kind == "birthday") {
+                    val birthday = com.hackinglab.toki.data.BirthdaySpec.from(event)
+                    val age = birthday.ageOn(time)
+                    if (age != null) Text("Turning $age", style = MaterialTheme.typography.bodyMedium)
+                    Text("Reminder at ${"%02d:%02d".format(birthday.hour, birthday.minute)} in your phone’s local time zone.", style = MaterialTheme.typography.bodyMedium)
+                    if (birthday.month == 2 && birthday.day == 29) Text("In non-leap years: ${if (birthday.leapDayPolicy == "mar1") "March 1" else "February 28"}.", style = MaterialTheme.typography.bodySmall)
+                }
                 Text("${date(time)} · ${ZoneId.systemDefault().id}", style = MaterialTheme.typography.bodyMedium)
-                if (event.timezone != ZoneId.systemDefault().id)
+                if (event.kind != "birthday" && event.timezone != ZoneId.systemDefault().id)
                     Text("Event time: ${date(time, event.timezone)} · ${event.timezone}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(when {
                     !event.enabled -> "This event or your personal reminder is switched off. Enable it in PocketBase, then sync."
                     preview?.problem != null -> preview.problem
                     preview?.nextStart == null -> "This event has no future deadline."
-                    reminderPassed -> "The reminder time has passed. This event stays here until its deadline."
+                    reminderPassed -> if (event.kind == "birthday") "The reminder time has passed. This birthday stays here all day." else "The reminder time has passed. This event stays here until its deadline."
+                    event.kind == "birthday" -> "Repeats every year. Reminders follow your phone’s local time."
                     event.reminderMinutes == 0 -> "Alarm rings at the event’s start time."
                     else -> "Alarm rings ${event.reminderMinutes} minutes before the event."
                 }, style = MaterialTheme.typography.bodyMedium)

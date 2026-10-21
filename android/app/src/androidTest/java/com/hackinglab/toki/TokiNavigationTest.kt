@@ -15,17 +15,25 @@ import java.io.File
 /** Synthetic UI data: never reads sessions, accesses the backend, or schedules alarms. */
 class TokiNavigationTest {
     @get:Rule val screen = createComposeRule()
-    private fun render(dark: Boolean = false, reminded: Boolean = false, includePast: Boolean = false, onCreate: (com.hackinglab.toki.data.NewEvent) -> Unit = {}, onDelete: (String) -> Unit = {}) {
+    private fun render(dark: Boolean = false, reminded: Boolean = false, includePast: Boolean = false, includeBirthday: Boolean = false, birthdaysAvailable: Boolean = true, onCreate: (com.hackinglab.toki.data.NewEvent) -> Unit = {}, onDelete: (String) -> Unit = {}) {
         val start = System.currentTimeMillis() + 3_600_000
         val events = listOf(
             Deadline().apply { id = "one"; title = "Project milestone"; timezone = "Europe/Zurich"; enabled = true; reminderMinutes = if (reminded) 120 else 0; startMillis = start },
             Deadline().apply { id = "two"; title = "Family birthday"; groupName = "Family"; timezone = "Europe/Zurich"; enabled = false; startMillis = start + 86_400_000 }
         ).reversed() + if (includePast) listOf(Deadline().apply { id = "past"; title = "Earlier deadline"; timezone = "Europe/Zurich"; startMillis = start - 7_200_000 }) else emptyList()
+        val birthday = com.hackinglab.toki.data.BirthdaySpec(java.time.LocalDate.now().monthValue, java.time.LocalDate.now().dayOfMonth, 2000).deadline("Alex", "", true).apply { id = "birthday:fixture" }
+        val records = events + if (includeBirthday) listOf(birthday) else emptyList()
         screen.setContent {
+            val view = androidx.compose.ui.platform.LocalView.current
+            androidx.compose.runtime.DisposableEffect(view) {
+                val previous = view.keepScreenOn
+                view.keepScreenOn = true
+                onDispose { view.keepScreenOn = previous }
+            }
             TOKITheme(darkTheme = dark) {
-                TokiScreen(TokiState(deletableIds = setOf("one"), deletePermissionsLoaded = true, ready = true, session = Session("preview", "preview", "hello@example.com"), deadlines = events,
+                TokiScreen(TokiState(birthdaysAvailable = birthdaysAvailable, deletableIds = setOf("one"), deletePermissionsLoaded = true, ready = true, session = Session("preview", "preview", "hello@example.com"), deadlines = records,
                     notificationsAllowed = true, exactAllowed = true, fullScreenAllowed = true, scheduled = 1,
-                    previews = events.associate { it.id to EventPreview(if (it.id == "past") null else it.startMillis, nextReminderStart = if (reminded && it.enabled) it.startMillis + 7 * 86_400_000L else it.startMillis) }),
+                    previews = records.associate { it.id to if (it.kind == "birthday") EventPreview(System.currentTimeMillis() - 3_600_000, visibleUntil = System.currentTimeMillis() + 3_600_000) else EventPreview(if (it.id == "past") null else it.startMillis, nextReminderStart = if (reminded && it.enabled) it.startMillis + 7 * 86_400_000L else it.startMillis) }),
                     onDelete = onDelete, onCreate = onCreate, onLogin = { _, _ -> }, onSync = {}, onLogout = {}, onTest = {}, onNotifications = {}, onExact = {}, onFullScreen = {})
             }
         }
@@ -95,8 +103,10 @@ class TokiNavigationTest {
     }
     @Test fun allEventsSortByDisplayedDateIncludingPast() {
         render(includePast = true)
+        screen.onNodeWithTag("event-filters").performScrollToNode(hasText("All"))
         screen.onNodeWithText("All").performClick()
         screen.onNodeWithTag("event-past").performScrollTo()
+        screen.onNodeWithTag("agenda-content").performScrollToNode(hasTestTag("event-two"))
         val past = screen.onNodeWithTag("event-past").fetchSemanticsNode().boundsInRoot.top
         val first = screen.onNodeWithTag("event-one").fetchSemanticsNode().boundsInRoot.top
         val second = screen.onNodeWithTag("event-two").fetchSemanticsNode().boundsInRoot.top
@@ -115,8 +125,67 @@ class TokiNavigationTest {
     }
     @Test fun groupMemberCannotDeleteSharedEvent() {
         render()
-        screen.onNodeWithTag("event-two").performScrollTo().performClick()
+        screen.onNodeWithTag("agenda-content").performScrollToNode(hasTestTag("event-two"))
+        screen.onNodeWithTag("event-two").performClick()
         screen.onNodeWithText("Delete event").assertDoesNotExist()
+    }
+    @Test fun birthdayFormUsesNineAndUnknownAgeByDefault() {
+        var saved: com.hackinglab.toki.data.NewEvent? = null
+        render(onCreate = { saved = it })
+        screen.onNodeWithText("+  New event").performClick()
+        screen.onNodeWithText("Birthday").performClick()
+        screen.onNodeWithText("Name").performTextInput("Alex")
+        screen.onNodeWithText("Birth date").performTextInput("29.2")
+        screen.onNodeWithTag("new-event-form").performScrollToNode(hasText("March 1"))
+        screen.onNodeWithText("March 1").performClick()
+        screen.onNodeWithText("Reminder (min before)").assertDoesNotExist()
+        screen.onNodeWithTag("new-event-form").performScrollToNode(hasText("Remind me at 09:00"))
+        screen.onNodeWithText("Remind me at 09:00").assertIsDisplayed()
+        screen.onNodeWithTag("new-event-form").performScrollToNode(hasText("Create birthday"))
+        screen.onNodeWithText("Create birthday").performClick()
+        screen.runOnIdle {
+            org.junit.Assert.assertEquals("Alex", saved?.title)
+            org.junit.Assert.assertEquals(0, saved?.birthday?.birthYear)
+            org.junit.Assert.assertEquals(9, saved?.birthday?.hour)
+            org.junit.Assert.assertEquals("mar1", saved?.birthday?.leapDayPolicy)
+            org.junit.Assert.assertEquals(2, saved?.birthday?.month)
+            org.junit.Assert.assertEquals(29, saved?.birthday?.day)
+            org.junit.Assert.assertEquals("birthday", saved?.deadline()?.kind)
+        }
+    }
+    @Test fun europeanBirthDateSubmitsCorrectDayMonthAndYear() {
+        var saved: com.hackinglab.toki.data.NewEvent? = null
+        render(onCreate = { saved = it })
+        screen.onNodeWithText("+  New event").performClick()
+        screen.onNodeWithText("Birthday").performClick()
+        screen.onNodeWithText("Name").performTextInput("Alex")
+        screen.onNodeWithText("Birth date").performTextInput("8.10.1968")
+        screen.onNodeWithTag("new-event-form").performScrollToNode(hasText("Create birthday"))
+        screen.onNodeWithText("Create birthday").performClick()
+        screen.runOnIdle {
+            org.junit.Assert.assertEquals(8, saved?.birthday?.day)
+            org.junit.Assert.assertEquals(10, saved?.birthday?.month)
+            org.junit.Assert.assertEquals(1968, saved?.birthday?.birthYear)
+        }
+    }
+    @Test fun birthdayRemainsVisibleAfterReminderAndHasItsOwnFilter() {
+        render(includeBirthday = true)
+        screen.onNodeWithTag("next-birthday-tile").assertIsDisplayed()
+        screen.onNodeWithTag("event-birthday:fixture").assertDoesNotExist()
+        screen.onNodeWithTag("next-birthday-tile").performClick()
+        screen.onNodeWithText("Birthdays").performScrollTo().performClick()
+        screen.onNodeWithText("1 birthday").performScrollTo().assertIsDisplayed()
+        screen.onNodeWithTag("event-birthday:fixture").performScrollTo().performClick()
+        screen.onNodeWithText("The reminder time has passed. This birthday stays here all day.").performScrollTo().assertIsDisplayed()
+        screen.onNodeWithText("Events").performScrollTo().performClick()
+        screen.onNodeWithTag("event-birthday:fixture").assertDoesNotExist()
+        screen.onNodeWithText("2 events").performScrollTo().assertIsDisplayed()
+    }
+    @Test fun oldBackendKeepsEventsAvailableButBirthdayCreationDisabled() {
+        render(birthdaysAvailable = false)
+        screen.onNodeWithText("+  New event").performClick()
+        screen.onNodeWithText("Birthday").assertIsNotEnabled()
+        screen.onNodeWithText("Title").assertIsDisplayed()
     }
     @Test fun darkAgendaRenders() { render(true); screen.onNodeWithText("NEXT ALARM").assertIsDisplayed(); snapshot("toki-dark.png") }
 }

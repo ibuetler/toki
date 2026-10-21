@@ -19,7 +19,7 @@ class TokiMigrationTest {
             db.version = 1
         }
         val upgraded = Room.databaseBuilder(context, TokiDatabase::class.java, name)
-            .addMigrations(TokiGraph.CACHE_MIGRATION).build()
+            .addMigrations(TokiGraph.CACHE_MIGRATION, TokiGraph.BIRTHDAY_CACHE_MIGRATION).build()
         try {
             val event = upgraded.deadlines().find("keep")
             assertEquals("Weekly meeting", event.title)
@@ -28,6 +28,8 @@ class TokiMigrationTest {
             assertEquals("", event.exdates)
             assertEquals("", event.rdates)
             assertFalse(event.recurrenceLoaded)
+            assertEquals("deadline", event.kind)
+            assertEquals(9, event.birthdayHour)
         } finally { upgraded.close(); context.deleteDatabase(name) }
     }
 }

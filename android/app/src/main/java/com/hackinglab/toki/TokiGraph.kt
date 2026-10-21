@@ -6,7 +6,7 @@ import com.hackinglab.toki.data.*
 
 class TokiGraph private constructor(context: Context) {
     val lock = Any()
-    val database = Room.databaseBuilder(context, TokiDatabase::class.java, "toki.db").addMigrations(CACHE_MIGRATION).build()
+    val database = Room.databaseBuilder(context, TokiDatabase::class.java, "toki.db").addMigrations(CACHE_MIGRATION, BIRTHDAY_CACHE_MIGRATION).build()
     val sessions = SessionStore(context)
     val reminders = Reminders(context)
     val api = PocketBase()
@@ -37,7 +37,7 @@ class TokiGraph private constructor(context: Context) {
                 database.deadlines().clear()
                 database.deadlines().insert(records)
             }
-            prefs.edit().putLong("lastSync", System.currentTimeMillis()).putStringSet("deletableIds", snapshot.deletableIds).commit()
+            prefs.edit().putLong("lastSync", System.currentTimeMillis()).putStringSet("deletableIds", snapshot.deletableIds).putBoolean("birthdaysAvailable", snapshot.birthdaysAvailable).commit()
             reminders.rebuild(records)
         }
     }
@@ -57,6 +57,15 @@ class TokiGraph private constructor(context: Context) {
             }
         }
 
+        val BIRTHDAY_CACHE_MIGRATION = object : androidx.room.migration.Migration(2, 3) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE deadlines ADD COLUMN kind TEXT NOT NULL DEFAULT 'deadline'")
+                for (field in listOf("birthdayMonth", "birthdayDay", "birthYear", "birthdayMinute"))
+                    db.execSQL("ALTER TABLE deadlines ADD COLUMN $field INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE deadlines ADD COLUMN birthdayHour INTEGER NOT NULL DEFAULT 9")
+                db.execSQL("ALTER TABLE deadlines ADD COLUMN leapDayPolicy TEXT NOT NULL DEFAULT 'feb28'")
+            }
+        }
         @Volatile private var instance: TokiGraph? = null
         fun get(context: Context): TokiGraph = instance ?: synchronized(this) {
             instance ?: TokiGraph(context.applicationContext).also { instance = it }

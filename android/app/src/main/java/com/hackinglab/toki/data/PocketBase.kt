@@ -16,7 +16,7 @@ object EventTime {
     fun reminderAt(start: Long, minutes: Int): Long = Math.subtractExact(start, minutes.toLong() * 60_000)
 }
 
-data class DeadlineSnapshot(val records: List<Deadline>, val deletableIds: Set<String>)
+data class DeadlineSnapshot(val records: List<Deadline>, val deletableIds: Set<String>, val birthdaysAvailable: Boolean)
 
 class PocketBase {
     companion object { const val BASE = "https://pocketbase.hacking-lab.com" }
@@ -72,6 +72,15 @@ class PocketBase {
         }
     }
     fun createDeadline(session: Session, draft: NewEvent) {
+        draft.birthday?.let { birthday ->
+            birthday.validate()
+            request("/api/collections/birthdays/records", session.token, JSONObject()
+                .put("owner", session.userId).put("name", draft.title.trim()).put("description", draft.description)
+                .put("month", birthday.month).put("day", birthday.day).put("birth_year", birthday.birthYear)
+                .put("reminder_hour", birthday.hour).put("reminder_minute", birthday.minute)
+                .put("leap_day_policy", birthday.leapDayPolicy).put("enabled", draft.enabled))
+            return
+        }
         val event = draft.deadline()
         request("/api/collections/deadlines/records", session.token, JSONObject()
             .put("owner", session.userId).put("group", "")
@@ -82,8 +91,11 @@ class PocketBase {
             .put("reminder_minutes", event.reminderMinutes).put("rrule", event.rrule))
     }
     fun deleteDeadline(session: Session, id: String) {
-        require(id.matches(Regex("[a-zA-Z0-9]{15}"))) { "Invalid event identifier." }
-        request("/api/collections/deadlines/records/$id", session.token, method = "DELETE")
+        val birthday = id.startsWith("birthday:")
+        val recordId = if (birthday) id.removePrefix("birthday:") else id
+        require(recordId.matches(Regex("[a-zA-Z0-9]{15}"))) { "Invalid event identifier." }
+        val collection = if (birthday) "birthdays" else "deadlines"
+        request("/api/collections/$collection/records/$recordId", session.token, method = "DELETE")
     }
     fun deadlines(session: Session): DeadlineSnapshot {
         val groupRecords = all("groups", session.token)
@@ -115,6 +127,24 @@ class PocketBase {
                 enabled = json.getBoolean("enabled") && (preference?.getBoolean("enabled") ?: true)
             }
         }
-        return DeadlineSnapshot(records, deletableIds)
+        var birthdaysAvailable = true
+        val birthdays = try { all("birthdays", session.token) } catch (error: ApiFailure) {
+            if (error.status != 404) throw error
+            birthdaysAvailable = false
+            emptyList()
+        }
+        val birthdayRecords = birthdays.map { json ->
+            Deadline().apply {
+                kind = "birthday"; id = "birthday:" + json.getString("id")
+                title = json.getString("name") + "’s birthday"; description = json.optString("description")
+                birthdayMonth = json.getInt("month"); birthdayDay = json.getInt("day"); birthYear = json.optInt("birth_year")
+                birthdayHour = json.getInt("reminder_hour"); birthdayMinute = json.getInt("reminder_minute")
+                leapDayPolicy = json.getString("leap_day_policy"); enabled = json.getBoolean("enabled")
+                timezone = java.time.ZoneId.systemDefault().id; allDay = true; recurrenceLoaded = true
+                startMillis = runCatching { BirthdaySpec.from(this).next(System.currentTimeMillis(), true)?.startMillis ?: 0 }.getOrDefault(0)
+                if (json.getString("owner") == session.userId) deletableIds += id
+            }
+        }
+        return DeadlineSnapshot(records + birthdayRecords, deletableIds, birthdaysAvailable)
     }
 }

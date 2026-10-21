@@ -7,11 +7,12 @@ import java.util.TimeZone
 
 /** Timed recurrence contract: event-zone wall time, gap skipped, overlap's first offset. */
 object OccurrencePlanner {
-    data class Occurrence(val startMillis: Long, val reminderMillis: Long)
+    data class Occurrence(val startMillis: Long, val reminderMillis: Long, val visibleUntilMillis: Long = startMillis)
     fun next(event: Deadline, afterMillis: Long): Occurrence? = nextOccurrence(event, afterMillis, false)
     /** Agenda visibility follows the deadline, independently of reminder delivery. */
     fun nextEvent(event: Deadline, afterMillis: Long): Occurrence? = nextOccurrence(event, afterMillis, true)
     private fun nextOccurrence(event: Deadline, afterMillis: Long, byDeadline: Boolean): Occurrence? {
+        if (event.kind == "birthday") return BirthdaySpec.from(event).next(afterMillis, byDeadline)
         require(event.rrule.isBlank() || event.recurrenceLoaded) { "Sync once to load recurrence exceptions." }
         require(!event.allDay) { "All-day reminder time is not configured yet." }
         require(event.reminderMinutes in 0..525600) { "Invalid reminder offset." }

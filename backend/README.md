@@ -4,7 +4,7 @@
 
 The files in `docker/Dockerfile` and `docker/docker-compose.yml` were copied from Jupiter. The Dockerfile defaults to PocketBase **0.40.5**, with Alpine 3.22 and amd64/arm64 support. This identifies the build configuration, not an independently inspected running Jupiter binary or image digest. Compose uses Traefik's external `transit` network, the `websecure` entrypoint, and `pocketbase.hacking-lab.com`, forwarding to port 8090.
 
-`pb_migrations/1792454400_toki_schema.js` imports the original `users` and `deadlines` definitions extracted read-only from the supplied local database copy. The subsequent group migration extends this baseline; `schema/collections.json` describes the combined target schema. See [group events](GROUPS.md) for its model, tests, and existing-server rollout instructions. The baseline preserves collection IDs, fields, indexes, access rules, password-auth configuration, and authentication feature enablement. It excludes records, server settings, token signing secrets, OAuth provider credentials, email templates, and custom token lifetimes; omitted settings use PocketBase defaults. This is a reproducible application schema, not a complete server backup.
+`pb_migrations/1792454400_toki_schema.js` imports the original `users` and `deadlines` definitions extracted read-only from the supplied local database copy. The subsequent group and private-birthday migrations extend this baseline; `schema/collections.json` describes the combined target schema. See [group events](GROUPS.md) for its model, tests, and existing-server rollout instructions. The baseline preserves collection IDs, fields, indexes, access rules, password-auth configuration, and authentication feature enablement. It excludes records, server settings, token signing secrets, OAuth provider credentials, email templates, and custom token lifetimes; omitted settings use PocketBase defaults. This is a reproducible application schema, not a complete server backup.
 
 The copied `docker/pb_data/` remains ignored by Git. `.dockerignore` also excludes it from image build contexts. Never commit database files, backups, real environment files, account records, or SMTP credentials.
 
@@ -37,6 +37,8 @@ docker compose -p toki-validation -f backend/docker/compose.local.yaml down
 The named volume is retained for inspection. Use a new project name and adjust the container name in the copy command when validating another empty installation.
 
 ## Access rules
+
+Private birthdays have a separate owner-only collection. See the [birthday guide](BIRTHDAYS.md) for its fields, tests, compatibility behavior, and backed-up Jupiter rollout.
 
 - `users`: users can list/view only themselves; create/update/delete are superuser-only.
 - Private `deadlines` require ownership; shared deadlines use group membership and admin roles. See [group permissions](GROUPS.md).

@@ -16,6 +16,13 @@ public class Deadline {
     @NonNull @ColumnInfo(defaultValue = "''") public String exdates = "";
     @NonNull @ColumnInfo(defaultValue = "''") public String rdates = "";
     @ColumnInfo(defaultValue = "0") public boolean recurrenceLoaded;
+    @NonNull @ColumnInfo(defaultValue = "'deadline'") public String kind = "deadline";
+    @ColumnInfo(defaultValue = "0") public int birthdayMonth;
+    @ColumnInfo(defaultValue = "0") public int birthdayDay;
+    @ColumnInfo(defaultValue = "0") public int birthYear;
+    @ColumnInfo(defaultValue = "9") public int birthdayHour = 9;
+    @ColumnInfo(defaultValue = "0") public int birthdayMinute;
+    @NonNull @ColumnInfo(defaultValue = "'feb28'") public String leapDayPolicy = "feb28";
     public long startMillis;
     public int reminderMinutes;
     public boolean enabled;

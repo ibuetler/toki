@@ -58,7 +58,7 @@ class Reminders(private val context: Context) {
         old.forEach { reset.remove("occurrence:$it").remove("trigger:$it") }
         reset.commit()
         var count = 0
-        if (ready()) records.filter { it.enabled && !it.allDay }.forEach {
+        if (ready()) records.filter { it.enabled && (!it.allDay || it.kind == "birthday") }.forEach {
             if (scheduleNext(it)) count++
         }
         val testAt = prefs.getLong("testAt", 0)
@@ -72,7 +72,7 @@ class Reminders(private val context: Context) {
         val ids = prefs.getStringSet("ids", emptySet())!!.toMutableSet().apply { remove(event.id) }
         val edit = prefs.edit().remove("occurrence:${event.id}").remove("trigger:${event.id}")
         var scheduled = false
-        if (event.enabled && !event.allDay && ready()) {
+        if (event.enabled && (!event.allDay || event.kind == "birthday") && ready()) {
             try {
                 val next = OccurrencePlanner.next(event, System.currentTimeMillis())
                 if (next != null) {
@@ -140,8 +140,11 @@ class ReminderReceiver : BroadcastReceiver() {
                         val event = app.database.deadlines().find(id)
                         val occurrence = app.reminders.consumeOccurrence(id)
                         if (event != null) {
-                            if (event.enabled && !event.allDay && occurrence != null) {
-                                app.reminders.show(id, event.title, "Starts in ${event.reminderMinutes} minutes")
+                            if (event.enabled && (!event.allDay || event.kind == "birthday") && occurrence != null) {
+                                app.reminders.show(id, event.title, if (event.kind == "birthday") {
+                                    val age = com.hackinglab.toki.data.BirthdaySpec.from(event).ageOn(occurrence)
+                                    if (age == null) "It’s their birthday today!" else "Turning $age today!"
+                                } else "Starts in ${event.reminderMinutes} minutes")
                             }
                             // Advance only this event so simultaneous alarms retain their triggers.
                             app.reminders.scheduleNext(event)

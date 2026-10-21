@@ -35,6 +35,19 @@ class TokiDeviceTest {
             assertEquals(1, db.deadlines().all().size)
         } finally { db.close() }
     }
+    @Test fun birthdayMetadataSurvivesCacheRoundTrip() {
+        val context = InstrumentationRegistry.getInstrumentation().context
+        val db = Room.inMemoryDatabaseBuilder(context, TokiDatabase::class.java).build()
+        try {
+            val birthday = BirthdaySpec(2, 29, 2000, 10, 15, "mar1").deadline("Alex", "Notes", true).apply { id = "birthday:cache" }
+            db.deadlines().insert(listOf(birthday))
+            val cached = db.deadlines().find(birthday.id)
+            assertEquals("birthday", cached.kind)
+            assertEquals(BirthdaySpec.from(birthday), BirthdaySpec.from(cached))
+            assertTrue(cached.allDay)
+            assertEquals("Notes", cached.description)
+        } finally { db.close() }
+    }
     @Test fun sessionUsesEncryptedStorageAndCanBeCleared() {
         // Separate preference namespace, using the process's actual storage UID.
         val context = object : android.content.ContextWrapper(InstrumentationRegistry.getInstrumentation().targetContext) {

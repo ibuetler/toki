@@ -6,8 +6,9 @@ import java.time.ZoneId
 /** Local form values are converted once, using the event's zone rather than the phone's. */
 data class NewEvent(val title: String, val description: String, val localStart: LocalDateTime,
     val timezone: String = ZoneId.systemDefault().id, val reminderMinutes: Int = 5,
-    val durationMinutes: Int = 60, val enabled: Boolean = true, val rrule: String = "") {
+    val durationMinutes: Int = 60, val enabled: Boolean = true, val rrule: String = "", val birthday: BirthdaySpec? = null) {
     fun deadline(): Deadline {
+        birthday?.let { return it.deadline(title, description, enabled) }
         require(title.isNotBlank()) { "Enter an event title." }
         require(title.trim().length <= 200) { "Keep the title within 200 characters." }
         val zone = try { ZoneId.of(timezone) } catch (_: Exception) { throw IllegalArgumentException("Enter a valid IANA time zone.") }

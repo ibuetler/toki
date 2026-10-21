@@ -27,6 +27,8 @@ PocketBase stores deadlines and controls access to each user's records. Android 
 
 The app uses **Kotlin, Jetpack Compose, Room, and AlarmManager**. Alarm-clock scheduling drives a foreground audio player and a lock-screen Dismiss screen. Notification and exact-alarm permissions are required; full-screen alarm access enables the lock-screen display. Cached alarms are restored after reboot/unlock, app updates, and clock/time-zone changes.
 
+Private birthdays are a separate yearly event type with an optional birth year, a local 09:00 reminder by default, and a selectable February 29 policy. See [birthday setup and backend rollout](backend/BIRTHDAYS.md).
+
 ## Deadline model
 
 The test suite expects a `users` authentication collection and a `deadlines` collection with these fields:
@@ -138,7 +140,7 @@ The suite creates disabled temporary deadlines with a `PBSEC-` prefix, updates t
 
 API tests cover authentication, own-record operations, cross-user and anonymous access attempts, recurrence exception persistence, and cleanup. Two local Python `dateutil` checks cover recurrence expansion and preservation of 09:00 Zurich time across the spring daylight-saving transition.
 
-The Python recurrence checks do not execute Android code or validate audible delivery. Android has separate unit and phone UI tests; the latest feature checks passed 21 unit tests, seven phone UI tests, and one isolated cache-deletion test on October 21, 2026. See the [Android testing guide](android/README.md#build-and-verify). Ownership-transfer tests target another real user. List checks filter by the known temporary record ID to avoid pagination gaps, and anonymous list access must not expose that record. Unexpectedly created records are tracked for cleanup, with other configured users tried if ownership has changed. These checks do not constitute a complete security audit.
+The Python recurrence checks do not execute Android code or validate audible delivery. Android has separate unit and phone UI tests; the latest feature checks passed 31 unit tests, eleven phone UI tests, and three cache/migration checks on October 21, 2026. See the [Android testing guide](android/README.md#build-and-verify). Ownership-transfer tests target another real user. List checks filter by the known temporary record ID to avoid pagination gaps, and anonymous list access must not expose that record. Unexpectedly created records are tracked for cleanup, with other configured users tried if ownership has changed. These checks do not constitute a complete security audit.
 
 ## Next steps
 
