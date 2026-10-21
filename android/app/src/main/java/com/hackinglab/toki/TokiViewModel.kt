@@ -13,7 +13,7 @@ import kotlinx.coroutines.withContext
 
 data class EventPreview(val nextStart: Long? = null, val problem: String? = null, val nextReminderStart: Long? = null, val visibleUntil: Long? = null)
 
-data class TokiState(val birthdaysAvailable: Boolean = false, val deletableIds: Set<String> = emptySet(), val deletePermissionsLoaded: Boolean = false, val createError: String? = null, val createdVersion: Int = 0, val ready: Boolean = false, val session: Session? = null,
+data class TokiState(val editing: EditableEvent? = null, val editError: String? = null, val birthdaysAvailable: Boolean = false, val deletableIds: Set<String> = emptySet(), val deletePermissionsLoaded: Boolean = false, val createError: String? = null, val createdVersion: Int = 0, val ready: Boolean = false, val session: Session? = null,
     val deadlines: List<Deadline> = emptyList(), val busy: Boolean = false,
     val message: String? = null, val lastSync: Long = 0, val scheduled: Int = 0,
     val exactAllowed: Boolean = false, val notificationsAllowed: Boolean = false, val fullScreenAllowed: Boolean = false, val testAt: Long = 0, val testDelay: Long = -1, val previews: Map<String, EventPreview> = emptyMap())
@@ -67,6 +67,46 @@ class TokiViewModel(application: Application) : AndroidViewModel(application) {
                     is java.io.IOException -> "Cannot reach PocketBase. Cached deadlines remain available; try Sync when online."
                     else -> "Could not complete the operation. Please try again."
                 }, ready = true)
+            } finally { mutable.value = mutable.value.copy(busy = false) }
+        }
+    }
+    fun closeEdit() { if (!mutable.value.busy) mutable.value = mutable.value.copy(editing = null, editError = null) }
+    fun editEvent(id: String) {
+        if (id !in mutable.value.deletableIds) return
+        action {
+            val session = graph.api.refresh(requireNotNull(graph.sessions.load()))
+            graph.sessions.save(session)
+            val edit = graph.api.editableEvent(session, id)
+            mutable.value = mutable.value.copy(editing = edit, editError = null)
+        }
+    }
+    fun updateEvent(draft: NewEvent) {
+        val edit = mutable.value.editing ?: return
+        if (mutable.value.busy) return
+        mutable.value = mutable.value.copy(busy = true, editError = null, message = null)
+        viewModelScope.launch {
+            var saved = false
+            try {
+                withContext(Dispatchers.IO) {
+                    val session = graph.api.refresh(requireNotNull(graph.sessions.load()))
+                    graph.sessions.save(session)
+                    graph.api.updateEvent(session, edit, draft)
+                    saved = true
+                    mutable.value = mutable.value.copy(editing = null)
+                    graph.sync(session)
+                    reload()
+                }
+                mutable.value = mutable.value.copy(message = "Changes saved and reminders updated.")
+            } catch (error: Exception) {
+                val message = when {
+                    saved -> "Changes saved in PocketBase, but sync failed. Tap Sync to update reminders on this phone."
+                    error is IllegalArgumentException -> error.message ?: "Check the event details."
+                    error is ApiFailure && error.status in listOf(403, 404) -> "The event no longer exists or you no longer have permission to edit it. Cancel and Sync to refresh."
+                    error is ApiFailure && error.status == 400 -> "PocketBase rejected the changes. Check the event details."
+                    error is ApiFailure && error.status == 401 -> "Your session expired. Cancel and sign in again."
+                    else -> "Could not confirm the changes. Cancel and Sync before retrying."
+                }
+                mutable.value = if (saved) mutable.value.copy(message = message) else mutable.value.copy(editError = message)
             } finally { mutable.value = mutable.value.copy(busy = false) }
         }
     }
@@ -140,7 +180,7 @@ class TokiViewModel(application: Application) : AndroidViewModel(application) {
         reload()
     }
     fun sync() = action { graph.sessions.load()?.let { graph.sync(it) }; reload() }
-    fun logout() = action { graph.logout(); reload() }
+    fun logout() = action { graph.logout(); mutable.value = mutable.value.copy(editing = null, editError = null); reload() }
     fun permissionsChanged() = action { reload() }
     fun testReminder() = action {
         val at = graph.reminders.test()

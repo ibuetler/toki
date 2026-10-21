@@ -46,7 +46,7 @@ private fun Glyph(@DrawableRes resource: Int, modifier: Modifier = Modifier, tin
 @Composable
 internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onSync: () -> Unit,
     onLogout: () -> Unit, onTest: () -> Unit, onNotifications: () -> Unit,
-    onExact: () -> Unit, onFullScreen: () -> Unit, onCreate: (com.hackinglab.toki.data.NewEvent) -> Unit = {}, onDelete: (String) -> Unit = {}) {
+    onExact: () -> Unit, onFullScreen: () -> Unit, onCreate: (com.hackinglab.toki.data.NewEvent) -> Unit = {}, onDelete: (String) -> Unit = {}, onEdit: (String) -> Unit = {}, onCloseEdit: () -> Unit = {}, onUpdate: (com.hackinglab.toki.data.NewEvent) -> Unit = {}) {
     var deletingId by rememberSaveable { mutableStateOf<String?>(null) }
     state.deadlines.find { it.id == deletingId }?.let { event ->
         AlertDialog(onDismissRequest = { deletingId = null },
@@ -59,6 +59,9 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
                 Text("Delete permanently", color = MaterialTheme.colorScheme.error)
             } },
             dismissButton = { TextButton(onClick = { deletingId = null }) { Text("Cancel") } })
+    }
+    state.editing?.let { edit ->
+        key(edit.id) { NewEventScreen(state.busy, state.editError, onCloseEdit, onUpdate, state.birthdaysAvailable, edit) }
     }
     var creating by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(state.createdVersion) { creating = false }
@@ -216,7 +219,7 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
                                 Modifier.padding(top = if (index == 0) 0.dp else 6.dp, start = 4.dp),
                                 style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            EventCard(event, state.previews[event.id], permissionReady, now, border, state.busy, event.id in state.deletableIds, state.deletePermissionsLoaded) { deletingId = event.id }
+                            EventCard(event, state.previews[event.id], permissionReady, now, border, state.busy, event.id in state.deletableIds, state.deletePermissionsLoaded, { onEdit(event.id) }) { deletingId = event.id }
                         }
                     }
                     item { Text(if (state.lastSync == 0L) "Not synced yet" else "Synced ${date(state.lastSync)} · Available offline", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -361,7 +364,7 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
     }
 }
 
-@Composable private fun EventCard(event: Deadline, preview: EventPreview?, permissionsReady: Boolean, now: Long, dateColor: Color, busy: Boolean, canDelete: Boolean, permissionsLoaded: Boolean, onDelete: () -> Unit) {
+@Composable private fun EventCard(event: Deadline, preview: EventPreview?, permissionsReady: Boolean, now: Long, dateColor: Color, busy: Boolean, canDelete: Boolean, permissionsLoaded: Boolean, onEdit: () -> Unit, onDelete: () -> Unit) {
     var expanded by rememberSaveable(event.id) { mutableStateOf(false) }
     val time = preview?.nextStart ?: event.startMillis
     val reminderPassed = preview?.nextStart != null && EventTime.reminderAt(preview.nextStart, event.reminderMinutes) <= now
@@ -411,8 +414,9 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
                 }, style = MaterialTheme.typography.bodyMedium)
                 if (event.description.isNotBlank()) Text(event.description, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (event.rrule.isNotBlank()) Text("Repeat rule: ${event.rrule}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (canDelete) TextButton(onClick = onDelete, enabled = !busy) {
-                    Text("Delete event", color = MaterialTheme.colorScheme.error)
+                if (canDelete) Row {
+                    TextButton(onClick = onEdit, enabled = !busy) { Text("Edit event") }
+                    TextButton(onClick = onDelete, enabled = !busy) { Text("Delete event", color = MaterialTheme.colorScheme.error) }
                 } else if (!permissionsLoaded) Text("Sync to load event actions.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }

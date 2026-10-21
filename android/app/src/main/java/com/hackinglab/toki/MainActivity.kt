@@ -33,7 +33,7 @@ class MainActivity : ComponentActivity() {
                     lifecycle.addObserver(observer)
                     onDispose { lifecycle.removeObserver(observer) }
                 }
-                TokiScreen(state, onDelete = model::deleteEvent, onCreate = model::createEvent, onLogin = model::login, onSync = model::sync, onLogout = model::logout, onTest = model::testReminder, onNotifications = {
+                TokiScreen(state, onEdit = model::editEvent, onCloseEdit = model::closeEdit, onUpdate = model::updateEvent, onDelete = model::deleteEvent, onCreate = model::createEvent, onLogin = model::login, onSync = model::sync, onLogout = model::logout, onTest = model::testReminder, onNotifications = {
                     if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED)
                         notifications.launch(Manifest.permission.POST_NOTIFICATIONS)
                     else startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName))

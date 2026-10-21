@@ -15,7 +15,7 @@ import java.io.File
 /** Synthetic UI data: never reads sessions, accesses the backend, or schedules alarms. */
 class TokiNavigationTest {
     @get:Rule val screen = createComposeRule()
-    private fun render(dark: Boolean = false, reminded: Boolean = false, includePast: Boolean = false, includeBirthday: Boolean = false, birthdaysAvailable: Boolean = true, onCreate: (com.hackinglab.toki.data.NewEvent) -> Unit = {}, onDelete: (String) -> Unit = {}) {
+    private fun render(dark: Boolean = false, reminded: Boolean = false, includePast: Boolean = false, includeBirthday: Boolean = false, birthdaysAvailable: Boolean = true, onCreate: (com.hackinglab.toki.data.NewEvent) -> Unit = {}, onDelete: (String) -> Unit = {}, onEdit: (String) -> Unit = {}) {
         val start = System.currentTimeMillis() + 3_600_000
         val events = listOf(
             Deadline().apply { id = "one"; title = "Project milestone"; timezone = "Europe/Zurich"; enabled = true; reminderMinutes = if (reminded) 120 else 0; startMillis = start },
@@ -34,9 +34,41 @@ class TokiNavigationTest {
                 TokiScreen(TokiState(birthdaysAvailable = birthdaysAvailable, deletableIds = setOf("one"), deletePermissionsLoaded = true, ready = true, session = Session("preview", "preview", "hello@example.com"), deadlines = records,
                     notificationsAllowed = true, exactAllowed = true, fullScreenAllowed = true, scheduled = 1,
                     previews = records.associate { it.id to if (it.kind == "birthday") EventPreview(System.currentTimeMillis() - 3_600_000, visibleUntil = System.currentTimeMillis() + 3_600_000) else EventPreview(if (it.id == "past") null else it.startMillis, nextReminderStart = if (reminded && it.enabled) it.startMillis + 7 * 86_400_000L else it.startMillis) }),
-                    onDelete = onDelete, onCreate = onCreate, onLogin = { _, _ -> }, onSync = {}, onLogout = {}, onTest = {}, onNotifications = {}, onExact = {}, onFullScreen = {})
+                    onEdit = onEdit, onDelete = onDelete, onCreate = onCreate, onLogin = { _, _ -> }, onSync = {}, onLogout = {}, onTest = {}, onNotifications = {}, onExact = {}, onFullScreen = {})
             }
         }
+    }
+    @Test fun expandedRowOffersEditBesideDelete() {
+        var selected: String? = null
+        render(onEdit = { selected = it })
+        screen.onNodeWithTag("event-one").performScrollTo().performClick()
+        screen.onNodeWithText("Edit event").performScrollTo().performClick()
+        screen.runOnIdle { org.junit.Assert.assertEquals("one", selected) }
+        screen.onNodeWithText("Delete event").assertExists()
+    }
+    @Test fun editPrefillsAndPreservesCustomRecurrence() {
+        val initial = com.hackinglab.toki.data.NewEvent("Existing meeting", "Existing notes", java.time.LocalDateTime.of(2027, 1, 12, 14, 30),
+            "Europe/Zurich", reminderMinutes = 30, durationMinutes = 90, rrule = "FREQ=WEEKLY;BYDAY=MO,FR")
+        var saved: com.hackinglab.toki.data.NewEvent? = null
+        screen.setContent { TOKITheme { NewEventScreen(false, null, {}, { saved = it }, edit = com.hackinglab.toki.data.EditableEvent("one", initial, true)) } }
+        screen.onNodeWithText("Edit event").assertIsDisplayed()
+        screen.onNodeWithText("Existing meeting").performTextReplacement("Updated meeting")
+        screen.onNodeWithTag("new-event-form").performScrollToNode(hasText("Custom repeat"))
+        screen.onNodeWithText("Custom repeat").assertIsDisplayed()
+        screen.onNodeWithTag("new-event-form").performScrollToNode(hasText("Save changes"))
+        screen.onNodeWithText("Save changes").performClick()
+        org.junit.Assert.assertEquals(initial.copy(title = "Updated meeting"), saved)
+    }
+    @Test fun editBirthdayPrefillsDateAndCancelDoesNotSave() {
+        val initial = com.hackinglab.toki.data.NewEvent("Alex", "", java.time.LocalDateTime.now(), birthday = com.hackinglab.toki.data.BirthdaySpec(10, 8, 1968, 10, 15))
+        var cancelled = false
+        var saved = false
+        screen.setContent { TOKITheme { NewEventScreen(false, null, { cancelled = true }, { saved = true }, edit = com.hackinglab.toki.data.EditableEvent("birthday:one", initial)) } }
+        screen.onNodeWithText("8.10.1968").assertExists()
+        screen.onNodeWithText("Remind me at 10:15").assertExists()
+        screen.onNodeWithText("Cancel").performClick()
+        org.junit.Assert.assertTrue(cancelled)
+        org.junit.Assert.assertFalse(saved)
     }
     private fun snapshot(name: String) {
         screen.onRoot().captureToImage().asAndroidBitmap().let { bitmap ->
@@ -128,6 +160,7 @@ class TokiNavigationTest {
         screen.onNodeWithTag("agenda-content").performScrollToNode(hasTestTag("event-two"))
         screen.onNodeWithTag("event-two").performClick()
         screen.onNodeWithText("Delete event").assertDoesNotExist()
+        screen.onNodeWithText("Edit event").assertDoesNotExist()
     }
     @Test fun birthdayFormUsesNineAndUnknownAgeByDefault() {
         var saved: com.hackinglab.toki.data.NewEvent? = null

@@ -73,7 +73,7 @@ This excludes November 2 and adds November 4 at 09:00 local time. These exceptio
 5. To delete an event, refresh once to load permissions, expand its row, tap **Delete event**, and confirm. Recurring deletion removes the entire series; shared events are deleted for everyone and require group owner/admin rights.
 6. Use the magnifying glass left of refresh to search; tap a compact event row for details. **Today** uses the phone’s date. Refresh after changes made in PocketBase.
 
-Existing event detail edits, group event creation, memberships, and personal reminder preferences are managed in PocketBase. Background sync and all-day alarms are not implemented. See the [Android guide](android/README.md) for limitations and troubleshooting.
+Expand an event and tap **Edit event** to update a regular event or birthday in Android; saving syncs changes and rebuilds reminders. Group event creation, memberships, and personal reminder preferences are managed in PocketBase. Background sync and all-day alarms are not implemented. See the [Android guide](android/README.md) for limitations and troubleshooting.
 
 ## Repository layout
 
@@ -147,5 +147,5 @@ The Python recurrence checks do not execute Android code or validate audible del
 1. Retain the verified migration backup and maintain the [deployment and recovery instructions](backend/GROUPS.md). Group sharing and SMTP are working on Jupiter.
 2. Validate a fresh backend installation with the strengthened regression suite.
 3. Define the all-day reminder-time policy. Timed recurrence, time zones, exclusions/additions, and shared Python/Kotlin fixtures are implemented.
-4. Extend Android with background synchronization, editing existing events, group event creation, and personal preference controls.
+4. Extend Android with background synchronization, group event creation, and personal preference controls.
 5. Verify reminders on devices, including offline operation, reboot recovery, permission changes, and edited or deleted events.

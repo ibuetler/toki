@@ -18,10 +18,10 @@ object EventTime {
 
 data class DeadlineSnapshot(val records: List<Deadline>, val deletableIds: Set<String>, val birthdaysAvailable: Boolean)
 
-class PocketBase {
+class PocketBase(internal val connect: (String) -> HttpURLConnection = { URI(BASE + it).toURL().openConnection() as HttpURLConnection }) {
     companion object { const val BASE = "https://pocketbase.hacking-lab.com" }
     private fun request(path: String, token: String? = null, payload: JSONObject? = null, method: String? = null): JSONObject {
-        val connection = URI(BASE + path).toURL().openConnection() as HttpURLConnection
+        val connection = connect(path)
         try {
             connection.connectTimeout = 15_000
             connection.readTimeout = 15_000
@@ -29,7 +29,6 @@ class PocketBase {
             connection.requestMethod = method ?: if (payload != null) "POST" else "GET"
             if (token != null) connection.setRequestProperty("Authorization", "Bearer $token")
             if (payload != null) {
-                connection.requestMethod = "POST"
                 connection.doOutput = true
                 connection.setRequestProperty("Content-Type", "application/json")
                 connection.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
@@ -89,6 +88,26 @@ class PocketBase {
             .put("timezone", event.timezone).put("enabled", event.enabled)
             .put("all_day", false).put("duration_minutes", draft.durationMinutes)
             .put("reminder_minutes", event.reminderMinutes).put("rrule", event.rrule))
+    }
+    private fun recordPath(id: String): String {
+        val recordId = id.removePrefix("birthday:")
+        require(recordId.matches(Regex("[a-zA-Z0-9]{15}"))) { "Invalid event identifier." }
+        return "/api/collections/${if (id.startsWith("birthday:")) "birthdays" else "deadlines"}/records/$recordId"
+    }
+    fun editableEvent(session: Session, id: String): EditableEvent {
+        val json = request(recordPath(id), session.token)
+        val birthday = if (id.startsWith("birthday:")) BirthdaySpec(json.getInt("month"), json.getInt("day"),
+            json.optInt("birth_year"), json.getInt("reminder_hour"), json.getInt("reminder_minute"), json.getString("leap_day_policy")) else null
+        val zone = if (birthday != null) java.time.ZoneId.systemDefault() else java.time.ZoneId.of(json.getString("timezone"))
+        val start = if (birthday != null) java.time.LocalDateTime.now(zone) else
+            Instant.ofEpochMilli(EventTime.parse(json.getString("start_at"))).atZone(zone).toLocalDateTime()
+        return EditableEvent(id, NewEvent(json.getString(if (birthday != null) "name" else "title"),
+            json.optString("description"), start, zone.id, json.optInt("reminder_minutes", 5),
+            json.optInt("duration_minutes", 60), json.getBoolean("enabled"), json.optString("rrule"), birthday), json.optString("group").isNotBlank())
+    }
+    fun updateEvent(session: Session, edit: EditableEvent, draft: NewEvent) {
+        val changes = edit.changes(draft)
+        if (changes.isNotEmpty()) request(recordPath(edit.id), session.token, JSONObject(changes), "PATCH")
     }
     fun deleteDeadline(session: Session, id: String) {
         val birthday = id.startsWith("birthday:")
