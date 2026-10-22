@@ -19,7 +19,7 @@ class TokiMigrationTest {
             db.version = 1
         }
         val upgraded = Room.databaseBuilder(context, TokiDatabase::class.java, name)
-            .addMigrations(TokiGraph.CACHE_MIGRATION, TokiGraph.BIRTHDAY_CACHE_MIGRATION, TokiGraph.TASK_CACHE_MIGRATION, TokiGraph.CALENDAR_CACHE_MIGRATION).build()
+            .addMigrations(TokiGraph.CACHE_MIGRATION, TokiGraph.BIRTHDAY_CACHE_MIGRATION, TokiGraph.TASK_CACHE_MIGRATION, TokiGraph.CALENDAR_CACHE_MIGRATION, TokiGraph.CALENDAR_VISIBILITY_MIGRATION).build()
         try {
             val event = upgraded.deadlines().find("keep")
             assertEquals("Weekly meeting", event.title)
@@ -29,8 +29,20 @@ class TokiMigrationTest {
             assertEquals("", event.rdates)
             assertFalse(event.recurrenceLoaded)
             assertEquals("deadline", event.kind)
+            assertFalse(event.hidden)
+            assertEquals("", event.externalKey)
             assertEquals(9, event.birthdayHour)
             assertTrue(upgraded.tasks().all().isEmpty())
+            val imported = com.hackinglab.toki.data.Deadline().apply {
+                id = "calendar:fixture"; kind = "calendar"; externalKey = "a".repeat(64)
+                sourceNames = "OST"; endMillis = 1793005200000
+            }
+            upgraded.deadlines().insert(listOf(imported))
+            upgraded.deadlines().setHidden(imported.id, true)
+            assertTrue(upgraded.deadlines().find(imported.id).hidden)
+            assertEquals(imported.externalKey, upgraded.deadlines().find(imported.id).externalKey)
+            upgraded.deadlines().setHidden(imported.id, false)
+            assertFalse(upgraded.deadlines().find(imported.id).hidden)
             val task = com.hackinglab.toki.data.TokiTask().apply { id = "task-fixture"; title = "Preserved thought"; priority = "urgent" }
             upgraded.tasks().insert(listOf(task))
             assertEquals("urgent", upgraded.tasks().find(task.id).priority)

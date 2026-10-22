@@ -59,7 +59,7 @@ class Reminders(private val context: Context) {
         old.forEach { reset.remove("occurrence:$it").remove("trigger:$it") }
         reset.commit()
         var count = 0
-        if (ready()) records.filter { it.enabled && (!it.allDay || it.kind == "birthday") }.forEach {
+        if (ready()) records.filter { !it.hidden && it.enabled && (!it.allDay || it.kind == "birthday") }.forEach {
             if (scheduleNext(it)) count++
         }
         val testAt = prefs.getLong("testAt", 0)
@@ -73,7 +73,7 @@ class Reminders(private val context: Context) {
         val ids = prefs.getStringSet("ids", emptySet())!!.toMutableSet().apply { remove(event.id) }
         val edit = prefs.edit().remove("occurrence:${event.id}").remove("trigger:${event.id}")
         var scheduled = false
-        if (event.enabled && (!event.allDay || event.kind == "birthday") && ready()) {
+        if (!event.hidden && event.enabled && (!event.allDay || event.kind == "birthday") && ready()) {
             try {
                 val next = OccurrencePlanner.next(event, System.currentTimeMillis())
                 if (next != null) {
@@ -141,7 +141,7 @@ class ReminderReceiver : BroadcastReceiver() {
                         val event = if (id.startsWith("task:")) app.database.tasks().find(id.removePrefix("task:"))?.alarm() else app.database.deadlines().find(id)
                         val occurrence = app.reminders.consumeOccurrence(id)
                         if (event != null) {
-                            if (event.enabled && (!event.allDay || event.kind == "birthday") && occurrence != null) {
+                            if (!event.hidden && event.enabled && (!event.allDay || event.kind == "birthday") && occurrence != null) {
                                 app.reminders.show(id, event.title, if (event.kind == "birthday") {
                                     val age = com.hackinglab.toki.data.BirthdaySpec.from(event).ageOn(occurrence)
                                     if (age == null) "It’s their birthday today!" else "Turning $age today!"

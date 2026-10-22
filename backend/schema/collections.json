@@ -990,5 +990,74 @@
     "createRule": null,
     "updateRule": null,
     "deleteRule": null
+  },
+  {
+    "id": "tokicalprefs0001",
+    "name": "calendar_preferences",
+    "type": "base",
+    "fields": [
+      {
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "help": "",
+        "hidden": false,
+        "id": "text3208210256",
+        "max": 15,
+        "min": 15,
+        "name": "id",
+        "pattern": "^[a-z0-9]+$",
+        "presentable": false,
+        "primaryKey": true,
+        "required": true,
+        "system": true,
+        "type": "text"
+      },
+      {
+        "cascadeDelete": true,
+        "collectionId": "_pb_users_auth_",
+        "help": "",
+        "hidden": false,
+        "id": "relation3479234172",
+        "maxSelect": 1,
+        "minSelect": 0,
+        "name": "owner",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "relation"
+      },
+      {
+        "autogeneratePattern": "",
+        "help": "",
+        "hidden": false,
+        "id": "text716834145",
+        "max": 64,
+        "min": 64,
+        "name": "external_key",
+        "pattern": "^[a-f0-9]{64}$",
+        "presentable": false,
+        "primaryKey": false,
+        "required": true,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "bool2287856061",
+        "name": "hidden",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "bool"
+      }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_calendar_preferences_owner_key ON calendar_preferences (owner, external_key)"
+    ],
+    "listRule": "@request.auth.id != \"\" && owner = @request.auth.id",
+    "viewRule": "@request.auth.id != \"\" && owner = @request.auth.id",
+    "createRule": "@request.auth.id != \"\" && owner = @request.auth.id && (@collection.calendar_events:target.owner ?= @request.auth.id && @collection.calendar_events:target.external_key ?= @request.body.external_key)",
+    "updateRule": "@request.auth.id != \"\" && owner = @request.auth.id && @request.body.owner:changed = false && @request.body.external_key:changed = false",
+    "deleteRule": "@request.auth.id != \"\" && owner = @request.auth.id"
   }
 ]

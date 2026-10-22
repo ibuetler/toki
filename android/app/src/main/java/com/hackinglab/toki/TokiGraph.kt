@@ -6,7 +6,7 @@ import com.hackinglab.toki.data.*
 
 class TokiGraph private constructor(context: Context) {
     val lock = Any()
-    val database = Room.databaseBuilder(context, TokiDatabase::class.java, "toki.db").addMigrations(CACHE_MIGRATION, BIRTHDAY_CACHE_MIGRATION, TASK_CACHE_MIGRATION, CALENDAR_CACHE_MIGRATION).build()
+    val database = Room.databaseBuilder(context, TokiDatabase::class.java, "toki.db").addMigrations(CACHE_MIGRATION, BIRTHDAY_CACHE_MIGRATION, TASK_CACHE_MIGRATION, CALENDAR_CACHE_MIGRATION, CALENDAR_VISIBILITY_MIGRATION).build()
     val sessions = SessionStore(context)
     val reminders = Reminders(context)
     val api = PocketBase()
@@ -41,11 +41,17 @@ class TokiGraph private constructor(context: Context) {
                 database.tasks().clear()
                 database.tasks().insert(snapshot.tasks)
             }
-            prefs.edit().putLong("lastSync", System.currentTimeMillis()).putStringSet("deletableIds", snapshot.deletableIds).putBoolean("tasksAvailable", snapshot.tasksAvailable).putBoolean("birthdaysAvailable", snapshot.birthdaysAvailable).commit()
+            prefs.edit().putBoolean("calendarHidingAvailable", snapshot.calendarHidingAvailable).putLong("lastSync", System.currentTimeMillis()).putStringSet("deletableIds", snapshot.deletableIds).putBoolean("tasksAvailable", snapshot.tasksAvailable).putBoolean("birthdaysAvailable", snapshot.birthdaysAvailable).commit()
             reminders.rebuild(alarmRecords())
         }
     }
-    fun alarmRecords(): List<Deadline> = database.deadlines().all() + database.tasks().all().mapNotNull { it.alarm() }
+    fun alarmRecords(): List<Deadline> = database.deadlines().all().filterNot { it.hidden } + database.tasks().all().mapNotNull { it.alarm() }
+    fun setCalendarHidden(id: String, hidden: Boolean, userId: String) = synchronized(lock) {
+        check(sessions.load()?.userId == userId) { "Session changed. Please sync." }
+        database.deadlines().setHidden(id, hidden)
+        reminders.rebuild(alarmRecords())
+        Unit
+    }
     fun saveLocalTask(task: TokiTask, userId: String) = synchronized(lock) {
         check(sessions.load()?.userId == userId) { "Session changed. Please sync." }
         database.tasks().insert(listOf(task))
@@ -91,6 +97,12 @@ class TokiGraph private constructor(context: Context) {
             override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE deadlines ADD COLUMN sourceNames TEXT NOT NULL DEFAULT ''")
                 db.execSQL("ALTER TABLE deadlines ADD COLUMN endMillis INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+        val CALENDAR_VISIBILITY_MIGRATION = object : androidx.room.migration.Migration(5, 6) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE deadlines ADD COLUMN externalKey TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE deadlines ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0")
             }
         }
         @Volatile private var instance: TokiGraph? = null

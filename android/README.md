@@ -39,6 +39,12 @@ Imported meetings appear in Events with source names such as **Compass Security 
 
 Jupiter imports the feeds every four hours by default. Android syncs on launch, when returning to the foreground, and on manual refresh; it does not register a background sync job. Changes reach phone alarms only after that sync. See the [calendar integration guide](../backend/calendar-sync/README.md).
 
+### Hide and restore imported events
+
+Expand an imported occurrence and tap **Hide in TOKI**. Use **Events → Hidden events → Restore event** to undo it; swipe the filter row horizontally if needed. Hidden occurrences are excluded from normal lists, global search, summary tiles and alarms. The action needs connectivity and updates the local cache/reminders immediately after server confirmation. Other devices receive it at their next sync. Restoring does not replay a past reminder.
+
+Preferences are stored in the owner-private `calendar_preferences` collection by stable occurrence key, separately from the importer-owned records. Reimporting or moving the same occurrence preserves its preference. Hidden state is persisted in Room version 6 and checked by scheduling and delivery code, including after reboot. Only individual occurrences are supported; series hiding is not implemented. The importer does not alter these preferences. An older backend without the preference collection disables the action; a failed preference download aborts sync rather than exposing hidden entries.
+
 ## Navigation
 
 Tap a populated Next alarm, Next event or Next birthday tile to reveal and expand that exact item. The **Alarms** tab in the bottom navigation opens alarm permissions, the sound test and delivery timing.
@@ -80,7 +86,7 @@ The recurrence set is DTSTART plus RRULE plus RDATE, minus EXDATE; duplicates co
 
 Only the next occurrence whose reminder is still in the future is registered per event. After delivery, only that event advances to its next occurrence, without network access; simultaneous events retain their own alarms. Sync, reboot, app update, and clock changes also rebuild schedules. Missed reminder times are not replayed on an ordinary sync. Invalid rules affect only their event, not the entire local schedule.
 
-Room cache versions 1–4 migrate to version 5 without dropping data. Version 5 adds imported-calendar source names and end timestamps. Version 4 adds a separate tasks table. Version 2 added recurrence exceptions; version 3 adds birthday metadata. Old cached recurring events are not armed until one successful **Sync now** loads their exception arrays. This avoids ringing for dates that were excluded on the server. The agenda keeps the current occurrence visible until its deadline, even after its reminder time has passed (shown as Due soon). Alarm scheduling independently advances to the next future reminder, so keeping an event visible does not ring it again. At the deadline, a recurring series advances to its next occurrence; past one-off events remain available under All.
+Room cache versions 1–5 migrate to version 6 without dropping data. Version 6 adds stable occurrence keys and hidden state. Version 5 adds imported-calendar source names and end timestamps. Version 4 adds a separate tasks table. Version 2 added recurrence exceptions; version 3 adds birthday metadata. Old cached recurring events are not armed until one successful **Sync now** loads their exception arrays. This avoids ringing for dates that were excluded on the server. The agenda keeps the current occurrence visible until its deadline, even after its reminder time has passed (shown as Due soon). Alarm scheduling independently advances to the next future reminder, so keeping an event visible does not ring it again. At the deadline, a recurring series advances to its next occurrence; past one-off events remain available under All.
 
 Eight shared cases live in `backend/fixtures/recurrence.tsv` and are checked by both Kotlin tests and the offline Python reference runner:
 
@@ -96,7 +102,7 @@ Sync runs on sign-in, app launch/return to the foreground, after event/birthday 
 
 ## Build and verify
 
-Calendar and navigation verification on **22 October 2026**: **48 unit tests passed**; build and lint passed. The 40 existing navigation/form checks and the cache migration check passed, followed by the new source-label/read-only UI check and three calendar API mapping checks. The API checks cover pagination, five-minute reminders, all-day imports, old backends and failed snapshots. The separate ten-screen capture fixture was last verified on **21 October 2026**. Screenshots use fictional in-memory data; these checks do not establish audible delivery, offline delivery or reboot behaviour. Backend importer tests and deployment verification are described in the [calendar guide](../backend/calendar-sync/README.md).
+Calendar and navigation verification on **22 October 2026**: **50 unit tests and 49 phone UI/API/cache checks passed**; build and lint passed. Checks cover hide/restore, hidden preference mapping, suppression of hidden alarms/search results, existing navigation, paginated imports, old backends, failed snapshots and migration from the original cache to version 6. The separate ten-screen capture fixture was last verified on **21 October 2026**. Screenshots use fictional in-memory data; these checks do not establish audible delivery, offline delivery or reboot behaviour on the physical phone. Backend preference privacy and persistence across deletion/reimport were verified in a disposable backend; see the [calendar guide](../backend/calendar-sync/README.md).
 
 
 Use Android Studio's configured JDK/SDK and the committed Gradle wrapper:

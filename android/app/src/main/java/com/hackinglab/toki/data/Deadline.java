@@ -25,6 +25,8 @@ public class Deadline {
     @NonNull @ColumnInfo(defaultValue = "'feb28'") public String leapDayPolicy = "feb28";
     @NonNull @ColumnInfo(defaultValue = "''") public String sourceNames = "";
     @ColumnInfo(defaultValue = "0") public long endMillis;
+    @NonNull @ColumnInfo(defaultValue = "''") public String externalKey = "";
+    @ColumnInfo(defaultValue = "0") public boolean hidden;
     public long startMillis;
     public int reminderMinutes;
     public boolean enabled;

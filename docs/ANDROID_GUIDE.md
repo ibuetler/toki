@@ -94,6 +94,14 @@ Imported meetings appear in **Events**, with their source calendar names. A meet
 
 Jupiter checks the feeds every four hours by default. After that import, open TOKI or press refresh to update the list and alarms on your phone. Outlook publication may introduce additional delay. See the [calendar integration guide](../backend/calendar-sync/README.md).
 
+### Hide an imported occurrence
+
+Expand an imported event and tap **Hide in TOKI**. It disappears from the normal event list, search and summary tiles, and its future alarm is cancelled on this phone. Outlook and other users' calendars are unchanged. Hiding requires an internet connection; the preference is applied locally after PocketBase confirms it.
+
+To undo it, open **Events**, swipe the horizontal filter row to **Hidden events**, and select it. Expand the occurrence and tap **Restore event**. It returns to the normal list, and a future five-minute reminder can be scheduled again. A reminder time that has already passed is not replayed.
+
+This hides only the selected occurrence, including its duplicate copies from other source calendars. Other occurrences in the same recurring series stay visible. The preference belongs to your TOKI account, survives reimports and is applied on other updated devices at their next sync. Hidden state is cached for offline viewing and alarm suppression. The Hidden events filter lists occurrences still present in the current import window; items removed by a server exclusion or deleted from Outlook are not listed there.
+
 ## Sync and offline use
 
 TOKI syncs when launched or brought back to the foreground. Tap refresh or **Account → Sync now** whenever you want another sync. Events/birthdays sync after creation and editing; task writes update the local cache directly. Android does not poll for updates in the background.

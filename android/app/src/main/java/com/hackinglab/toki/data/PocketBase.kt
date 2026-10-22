@@ -16,7 +16,7 @@ object EventTime {
     fun reminderAt(start: Long, minutes: Int): Long = Math.subtractExact(start, minutes.toLong() * 60_000)
 }
 
-data class DeadlineSnapshot(val records: List<Deadline>, val deletableIds: Set<String>, val birthdaysAvailable: Boolean, val tasks: List<TokiTask> = emptyList(), val tasksAvailable: Boolean = false)
+data class DeadlineSnapshot(val records: List<Deadline>, val deletableIds: Set<String>, val birthdaysAvailable: Boolean, val tasks: List<TokiTask> = emptyList(), val tasksAvailable: Boolean = false, val calendarHidingAvailable: Boolean = false)
 
 class PocketBase(internal val connect: (String) -> HttpURLConnection = { URI(BASE + it).toURL().openConnection() as HttpURLConnection }) {
     companion object { const val BASE = "https://pocketbase.hacking-lab.com" }
@@ -136,6 +136,26 @@ class PocketBase(internal val connect: (String) -> HttpURLConnection = { URI(BAS
     fun completeTask(session: Session, id: String, completed: Boolean): TokiTask =
         task(request(taskPath(id), session.token, JSONObject().put("completed", completed), "PATCH"))
     fun deleteTask(session: Session, id: String) { request(taskPath(id), session.token, method = "DELETE") }
+    fun setCalendarHidden(session: Session, externalKey: String, hidden: Boolean) {
+        require(externalKey.matches(Regex("[a-f0-9]{64}")))
+        fun preference() = all("calendar_preferences", session.token).firstOrNull { it.getString("external_key") == externalKey }
+        fun patch(record: JSONObject) {
+            request("/api/collections/calendar_preferences/records/" + record.getString("id"), session.token,
+                JSONObject().put("hidden", hidden), "PATCH")
+        }
+        val existing = preference()
+        if (existing != null) { patch(existing); return }
+        if (!hidden) return
+        try {
+            request("/api/collections/calendar_preferences/records", session.token,
+                JSONObject().put("owner", session.userId).put("external_key", externalKey).put("hidden", true))
+        } catch (error: ApiFailure) {
+            // Another device may have created the unique preference concurrently.
+            if (error.status != 400) throw error
+            val concurrent = preference() ?: throw error
+            patch(concurrent)
+        }
+    }
     fun deadlines(session: Session): DeadlineSnapshot {
         val groupRecords = all("groups", session.token)
         val groups = groupRecords.associate { it.getString("id") to it.getString("name") }
@@ -194,9 +214,17 @@ class PocketBase(internal val connect: (String) -> HttpURLConnection = { URI(BAS
             if (error.status != 404) throw error
             emptyList()
         }
+        var calendarHidingAvailable = true
+        val calendarPreferences = try { all("calendar_preferences", session.token) } catch (error: ApiFailure) {
+            if (error.status != 404) throw error
+            calendarHidingAvailable = false
+            emptyList()
+        }.associateBy { it.getString("external_key") }
         val imported = calendars.map { json ->
             Deadline().apply {
                 kind = "calendar"; id = "calendar:" + json.getString("id")
+                externalKey = json.getString("external_key")
+                hidden = calendarPreferences[externalKey]?.optBoolean("hidden") ?: false
                 title = json.getString("title")
                 sourceNames = json.getString("source_names")
                 description = listOf(json.optString("description"), json.optString("location").takeIf { it.isNotBlank() }?.let { "Location: $it" }.orEmpty()).filter { it.isNotBlank() }.joinToString("\n\n")
@@ -207,6 +235,6 @@ class PocketBase(internal val connect: (String) -> HttpURLConnection = { URI(BAS
                 reminderMinutes = 5; enabled = !allDay; recurrenceLoaded = true
             }
         }
-        return DeadlineSnapshot(records + birthdayRecords + imported, deletableIds, birthdaysAvailable, tasks, tasksAvailable)
+        return DeadlineSnapshot(records + birthdayRecords + imported, deletableIds, birthdaysAvailable, tasks, tasksAvailable, calendarHidingAvailable)
     }
 }

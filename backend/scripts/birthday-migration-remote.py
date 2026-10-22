@@ -15,11 +15,13 @@ import time
 
 container, app_name, work_name, mode = sys.argv[1:5]
 collection = sys.argv[5] if len(sys.argv) > 5 else 'birthdays'
-if collection not in {'birthdays', 'tasks', 'calendar_events'}: raise RuntimeError('Unreviewed migration')
-MIGRATION = {'birthdays': '1792540800_birthdays.js', 'tasks': '1792627200_tasks.js', 'calendar_events': '1792713600_calendar_events.js'}[collection]
+if collection not in {'birthdays', 'tasks', 'calendar_events', 'calendar_preferences'}: raise RuntimeError('Unreviewed migration')
+MIGRATION = {'birthdays': '1792540800_birthdays.js', 'tasks': '1792627200_tasks.js', 'calendar_events': '1792713600_calendar_events.js', 'calendar_preferences': '1792713601_calendar_preferences.js'}[collection]
 required_fields = ({'owner', 'name', 'month', 'day', 'birth_year', 'reminder_hour', 'reminder_minute', 'leap_day_policy', 'enabled'} if collection == 'birthdays' else {'owner', 'title', 'notes', 'priority', 'completed', 'remind_at'})
 if collection == 'calendar_events':
     required_fields = {'owner', 'external_key', 'title', 'description', 'location', 'source_names', 'start_at', 'end_at', 'timezone', 'all_day', 'enabled', 'reminder_minutes'}
+if collection == 'calendar_preferences':
+    required_fields = {'owner', 'external_key', 'hidden'}
 app, work = Path(app_name), Path(work_name)
 apply = mode == 'apply'
 

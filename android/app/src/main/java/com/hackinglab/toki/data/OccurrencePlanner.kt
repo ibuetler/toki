@@ -12,6 +12,7 @@ object OccurrencePlanner {
     /** Agenda visibility follows the deadline, independently of reminder delivery. */
     fun nextEvent(event: Deadline, afterMillis: Long): Occurrence? = nextOccurrence(event, afterMillis, true)
     private fun nextOccurrence(event: Deadline, afterMillis: Long, byDeadline: Boolean): Occurrence? {
+        if (event.hidden && !byDeadline) return null
         if (event.kind == "birthday") return BirthdaySpec.from(event).next(afterMillis, byDeadline)
         if (event.kind == "calendar" && event.allDay) {
             if (!byDeadline || event.endMillis <= afterMillis) return null

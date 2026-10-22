@@ -5,6 +5,11 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class GlobalSearchTest {
+    @Test fun hiddenCalendarEventsStayOutOfNormalSearch() {
+        val hidden = Deadline().apply { id = "calendar:hidden"; kind = "calendar"; title = "Meeting"; this.hidden = true }
+        val shown = Deadline().apply { id = "shown"; title = "Meeting" }
+        assertEquals(listOf("shown"), GlobalSearch.find(listOf(hidden, shown), emptyList(), "meeting").map { it.id })
+    }
     @Test fun searchesAllTypesAndCompletedTasksWithoutFilteringPastEvents() {
         val event = Deadline().apply { id = "one"; title = "Earlier meeting"; description = "needle"; startMillis = 1 }
         val birthday = Deadline().apply { id = "birthday:one"; kind = "birthday"; title = "Alex’s birthday"; description = "Needle" }

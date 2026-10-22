@@ -10,21 +10,22 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 class CalendarTransportTest {
-    private fun api(calendarStatus: Int = 200): PocketBase = PocketBase { path ->
+    private fun api(calendarStatus: Int = 200, preferenceStatus: Int = 200, hidden: Boolean = false): PocketBase = PocketBase { path ->
+        val preferences = path.contains("/calendar_preferences/")
         val calendar = path.contains("/calendar_events/")
         val second = path.contains("page=2&")
         val row = JSONObject().put("id", if (second) "second" else "first")
-            .put("title", "Shared meeting").put("description", "Notes").put("location", "Room A")
+            .put("external_key", (if (second) "b" else "a").repeat(64)).put("title", "Shared meeting").put("description", "Notes").put("location", "Room A")
             .put("source_names", "Compass Security · OST").put("timezone", "UTC")
             .put("start_at", "2026-10-22 10:00:00.000Z").put("end_at", "2026-10-22 11:00:00.000Z")
             .put("all_day", second)
         val body = JSONObject().put("totalPages", if (calendar) 2 else 1)
-            .put("items", if (calendar) JSONArray().put(row) else JSONArray()).toString()
+            .put("items", if (calendar) JSONArray().put(row) else if (preferences && hidden) JSONArray().put(JSONObject().put("id", "pref").put("external_key", "a".repeat(64)).put("hidden", true)) else JSONArray()).toString()
         object : HttpURLConnection(URL("https://example.invalid")) {
             override fun connect() {}
             override fun disconnect() {}
             override fun usingProxy() = false
-            override fun getResponseCode() = if (calendar) calendarStatus else 200
+            override fun getResponseCode() = if (calendar) calendarStatus else if (preferences) preferenceStatus else 200
             override fun getInputStream() = ByteArrayInputStream(body.toByteArray())
         }
     }
@@ -41,6 +42,21 @@ class CalendarTransportTest {
         assertFalse(result.records.last().enabled)
         assertTrue(result.records.last().allDay)
         assertTrue(result.deletableIds.isEmpty())
+    }
+    @Test fun hiddenPreferencesJoinByStableKeyAndDoNotHideOtherOccurrences() {
+        val snapshot = api(hidden = true).deadlines(Session("token", "owner", "owner@example.invalid"))
+        assertTrue(snapshot.calendarHidingAvailable)
+        assertTrue(snapshot.records.first().hidden)
+        assertFalse(snapshot.records.last().hidden)
+    }
+    @Test fun missingPreferencesDisableHidingOnOlderBackend() {
+        assertFalse(api(preferenceStatus = 404).deadlines(Session("token", "owner", "owner@example.invalid")).calendarHidingAvailable)
+    }
+    @Test fun preferenceDownloadFailureAbortsSnapshot() {
+        try {
+            api(preferenceStatus = 503).deadlines(Session("token", "owner", "owner@example.invalid"))
+            fail("Expected failed snapshot")
+        } catch (error: ApiFailure) { assertEquals(503, error.status) }
     }
     @Test fun oldBackendWithoutCalendarsStillSyncs() {
         assertTrue(api(404).deadlines(Session("token", "owner", "owner@example.invalid")).records.isEmpty())

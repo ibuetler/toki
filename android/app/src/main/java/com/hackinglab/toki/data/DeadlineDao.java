@@ -11,5 +11,6 @@ public interface DeadlineDao {
     @Query("SELECT * FROM deadlines WHERE id = :id") Deadline find(String id);
     @Query("DELETE FROM deadlines") void clear();
     @Query("DELETE FROM deadlines WHERE id = :id") void delete(String id);
+    @Query("UPDATE deadlines SET hidden = :hidden WHERE id = :id") void setHidden(String id, boolean hidden);
     @Insert void insert(List<Deadline> records);
 }

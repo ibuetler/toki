@@ -33,6 +33,23 @@ Changing `user` moves the source's imports on the next successful job. The previ
 
 Run only **one importer configuration against this collection**. This job manages all `calendar_events` records, including cleaning up previous recipients when a source is removed or reassigned. Independent jobs with different configurations would remove each other's records.
 
+## Personal hide preferences in Android
+
+**Hide in TOKI** hides one imported occurrence for the signed-in user. **Events → Hidden events → Restore event** reverses it. It does not change Outlook, other users or the server's exclusion list. It removes the occurrence from normal lists, search, summary tiles and future alarms on that device after server confirmation. Other updated devices apply the preference on their next sync; no background polling is added.
+
+The additive `1792713601_calendar_preferences.js` migration creates `calendar_preferences`, with owner, stable `external_key` and `hidden`. Owners can read only their own preferences, create them only for an occurrence currently assigned to them, and update only the hidden flag without transferring ownership or changing the key. A unique owner/key index handles concurrent creation. Account deletion cascades to preferences. The key is deliberately not a relation to the imported record: deleting/recreating an occurrence, or leaving/re-entering the import horizon, must preserve its hidden state. The importer never edits this collection.
+
+Only occurrences are supported, not entire recurring series. The Hidden events view shows currently imported hidden occurrences. Entries removed by server exclusions or absent from the feed/horizon cannot be restored through that view until they are imported again. Restoring does not replay reminders that already passed. Hide/restore needs an online write; cached hidden state remains effective offline and after reboot.
+
+Deploy the preference schema separately after the calendar collection exists:
+
+```sh
+./backend/scripts/apply-jupiter-calendar-preferences.sh --host root@jupiter
+./backend/scripts/apply-jupiter-calendar-preferences.sh --host root@jupiter --apply
+```
+
+The wrapper rehearses first, verifies a stopped-service backup, preserves existing data/rules, and retains a private recovery archive. Rollback requires restoring that verified backup and matching application version, not dropping preferences. The migration was deployed on 22 October 2026; backup: `/opt/applic/pocketbase/backups-toki-calendar_preferences-20261022T132851Z-w30ncmiz`.
+
 ## Exclude unwanted events
 
 Edit the private configuration on Jupiter:
@@ -151,3 +168,5 @@ The exact-title exclusion was deployed on 22 October 2026. It removed 45 matchin
 Validation passed 20 importer unit cases, a real disposable-backend API/privacy lifecycle test, and the retained-WAL backup regression. Android passed 48 unit tests plus the calendar source-label and API mapping checks.
 
 Per-calendar recipient emails were deployed on 22 October 2026. All three existing sources remain assigned to the original account; no ownership transfer was requested for them. Recipient resolution and reassignment privacy were checked against a disposable backend.
+
+Hide/restore validation on 22 October 2026 passed the disposable-backend lifecycle/privacy test, 50 Android unit tests and 49 phone UI/API/cache checks. The migration rehearsal and deployment preserved existing records, schemas, settings and access rules. Build and lint passed. No real event was hidden by the synthetic tests.

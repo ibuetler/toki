@@ -44,6 +44,40 @@ class TokiNavigationTest {
             }
         }
     }
+    @Test fun importedOccurrenceCanBeHiddenAndRestoredFromHiddenEvents() {
+        val hidden = androidx.compose.runtime.mutableStateOf(false)
+        var requested: Boolean? = null
+        val start = System.currentTimeMillis() + 3_600_000
+        screen.setContent {
+            val view = androidx.compose.ui.platform.LocalView.current
+            androidx.compose.runtime.DisposableEffect(view) {
+                val old = view.keepScreenOn; view.keepScreenOn = true
+                onDispose { view.keepScreenOn = old }
+            }
+            val event = Deadline().apply {
+                id = "calendar:hide-fixture"; kind = "calendar"; title = "Imported occurrence"
+                externalKey = "a".repeat(64); sourceNames = "OST"; enabled = true
+                startMillis = start; this.hidden = hidden.value
+            }
+            TOKITheme {
+                TokiScreen(TokiState(ready = true, calendarHidingAvailable = true,
+                    session = Session("preview", "preview", "hello@example.com"), deadlines = listOf(event),
+                    previews = mapOf(event.id to EventPreview(start, nextReminderStart = start))),
+                    onHideCalendar = { id, value -> org.junit.Assert.assertEquals(event.id, id); requested = value; hidden.value = value },
+                    onLogin = { _, _ -> }, onSync = {}, onLogout = {}, onTest = {}, onNotifications = {}, onExact = {}, onFullScreen = {})
+            }
+        }
+        screen.onNodeWithTag("next-event-tile").performClick()
+        screen.onNodeWithText("Hide in TOKI").performScrollTo().performClick()
+        screen.runOnIdle { org.junit.Assert.assertEquals(true, requested) }
+        screen.onNodeWithTag("agenda-content").performScrollToNode(hasTestTag("event-filters"))
+        screen.onNodeWithTag("event-filters").performScrollToNode(hasText("Hidden events"))
+        screen.onNodeWithText("Hidden events").performClick()
+        screen.onNodeWithTag("agenda-content").performScrollToNode(hasTestTag("event-calendar:hide-fixture"))
+        screen.onNodeWithText("Restore event").performScrollTo().performClick()
+        screen.runOnIdle { org.junit.Assert.assertEquals(false, requested) }
+        screen.onNodeWithText("No hidden calendar events. Expand an imported event to hide it in TOKI.").assertExists()
+    }
     @Test fun importedCalendarShowsAllSourcesAndReadOnlyDetails() {
         val now = System.currentTimeMillis()
         val imported = Deadline().apply {

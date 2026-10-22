@@ -20,6 +20,14 @@ class OccurrencePlannerTest {
             }
         }
     }
+    @Test fun hiddenOccurrenceNeverSchedulesButKeepsItsDisplayDate() {
+        val e = event("2026-10-22T10:00:00Z").apply { kind = "calendar"; hidden = true }
+        val before = millis("2026-10-22T08:00:00Z")
+        assertNull(OccurrencePlanner.next(e, before))
+        assertEquals(e.startMillis, OccurrencePlanner.nextEvent(e, before)!!.startMillis)
+        e.hidden = false
+        assertEquals(millis("2026-10-22T09:55:00Z"), OccurrencePlanner.next(e, before)!!.reminderMillis)
+    }
     @Test fun importedAllDayVisibleUntilEndWithoutAlarm() {
         val e = event("2026-10-21T22:00:00Z").apply {
             kind = "calendar"; allDay = true; enabled = false

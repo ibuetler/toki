@@ -51,14 +51,32 @@ class BackendTests(unittest.TestCase):
             self.assertEqual(200, call('GET', outsider, transferred['id']).status_code)
             reconcile_users(api, {owner: desired}, True)
             self.assertEqual([], api.records(other))
+            preferences = os.environ['TOKI_TEST_URL'] + '/api/collections/calendar_preferences/records'
+            def prefcall(method, auth, rid='', payload=None):
+                return requests.request(method, preferences + ('/' + rid if rid else ''), headers={'Authorization': auth}, json=payload, timeout=15)
+            key = row['external_key']
+            response = prefcall('POST', token, payload={'owner': owner, 'external_key': key, 'hidden': True})
+            self.assertEqual(200, response.status_code)
+            preference = response.json()['id']
+            self.assertEqual(404, prefcall('GET', outsider, preference).status_code)
+            self.assertEqual([], prefcall('GET', outsider).json()['items'])
+            for payload in ({'owner': owner, 'external_key': key, 'hidden': True}, {'owner': other, 'external_key': 'f' * 64, 'hidden': True}):
+                self.assertIn(prefcall('POST', outsider, payload=payload).status_code, (400, 403, 404))
+            self.assertIn(prefcall('PATCH', token, preference, {'owner': other}).status_code, (400, 403, 404))
+            self.assertIn(prefcall('PATCH', token, preference, {'external_key': 'f' * 64}).status_code, (400, 403, 404))
+            self.assertEqual(200, prefcall('PATCH', token, preference, {'hidden': False}).status_code)
+            self.assertFalse(prefcall('GET', token, preference).json()['hidden'])
+            self.assertEqual(200, prefcall('PATCH', token, preference, {'hidden': True}).status_code)
             moved = merge_feeds([parse(feed(BASE.replace('20261022T100000Z', '20261023T100000Z')))])
             self.assertEqual(1, reconcile(api, owner, moved, True)['updated'])
             self.assertEqual(row['id'], api.records(owner)[0]['id'])
             reconcile(api, owner, {}, True)
             self.assertEqual([], api.records(owner))
             reconcile(api, owner, desired, True)
+            self.assertTrue(prefcall('GET', token, preference).json()['hidden'])
             api.request('DELETE', '/api/collections/users/records/' + owner)
             self.assertEqual([], api.records(owner))
+            self.assertEqual(0, api.request('GET', '/api/collections/calendar_preferences/records')['totalItems'])
             accounts.pop(0)
         finally:
             for user, _ in accounts:

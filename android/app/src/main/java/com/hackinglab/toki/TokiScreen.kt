@@ -49,7 +49,7 @@ private fun Glyph(@DrawableRes resource: Int, modifier: Modifier = Modifier, tin
 @Composable
 internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onSync: () -> Unit,
     onLogout: () -> Unit, onTest: () -> Unit, onNotifications: () -> Unit,
-    onExact: () -> Unit, onFullScreen: () -> Unit, onCreate: (com.hackinglab.toki.data.NewEvent) -> Unit = {}, onDelete: (String) -> Unit = {}, onEdit: (String) -> Unit = {}, onCloseEdit: () -> Unit = {}, onUpdate: (com.hackinglab.toki.data.NewEvent) -> Unit = {}, onSaveTask: (TaskDraft, String?) -> Unit = { _, _ -> }, onCompleteTask: (String, Boolean) -> Unit = { _, _ -> }, onDeleteTask: (String) -> Unit = {}, onClearTaskError: () -> Unit = {}) {
+    onExact: () -> Unit, onFullScreen: () -> Unit, onCreate: (com.hackinglab.toki.data.NewEvent) -> Unit = {}, onDelete: (String) -> Unit = {}, onEdit: (String) -> Unit = {}, onCloseEdit: () -> Unit = {}, onUpdate: (com.hackinglab.toki.data.NewEvent) -> Unit = {}, onSaveTask: (TaskDraft, String?) -> Unit = { _, _ -> }, onCompleteTask: (String, Boolean) -> Unit = { _, _ -> }, onDeleteTask: (String) -> Unit = {}, onClearTaskError: () -> Unit = {}, onHideCalendar: (String, Boolean) -> Unit = { _, _ -> }) {
     var deletingId by rememberSaveable { mutableStateOf<String?>(null) }
     state.deadlines.find { it.id == deletingId }?.let { event ->
         AlertDialog(onDismissRequest = { deletingId = null },
@@ -161,17 +161,18 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
     val permissionReady = state.notificationsAllowed && state.exactAllowed
     val visible = state.deadlines.filter { event ->
         val next = state.previews[event.id]?.nextStart
-        (if (birthdayList) event.kind == "birthday" else event.kind != "birthday") && when (filter) {
+        (if (birthdayList) event.kind == "birthday" else event.kind != "birthday") &&
+            (if (filter == "Hidden events") event.kind == "calendar" && event.hidden else !event.hidden) && when (filter) {
             "Today" -> next != null && Instant.ofEpochMilli(next).atZone(ZoneId.systemDefault()).toLocalDate() == Instant.ofEpochMilli(now).atZone(ZoneId.systemDefault()).toLocalDate()
             "Groups" -> event.groupName.isNotBlank()
             "Upcoming" -> next != null && (state.previews[event.id]?.visibleUntil ?: next) > now
             else -> true
         }
     }.sortedWith(compareBy<Deadline> { state.previews[it.id]?.nextStart ?: it.startMillis }.thenBy { it.title.lowercase() }.thenBy { it.id })
-    val next = (state.deadlines + state.tasks.mapNotNull { it.alarm() }).filter { it.enabled && state.previews[it.id]?.problem == null }
+    val next = (state.deadlines + state.tasks.mapNotNull { it.alarm() }).filter { !it.hidden && it.enabled && state.previews[it.id]?.problem == null }
         .mapNotNull { e -> state.previews[e.id]?.let { it.nextReminderStart ?: it.nextStart }?.let { start -> e to EventTime.reminderAt(start, e.reminderMinutes) } }
         .filter { it.second > now }.minByOrNull { it.second }
-    val nextEvent = state.deadlines.filter { it.kind != "birthday" }.mapNotNull { event ->
+    val nextEvent = state.deadlines.filter { !it.hidden && it.kind != "birthday" }.mapNotNull { event ->
         state.previews[event.id]?.let { preview -> preview.nextStart?.takeIf { (preview.visibleUntil ?: it) > now }?.let { event to it } }
     }.minByOrNull { it.second }
     val nextBirthday = state.deadlines.filter { it.kind == "birthday" && state.previews[it.id]?.problem == null }.mapNotNull { event ->
@@ -320,11 +321,12 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
                         }
                     } else {
                     item { LazyRow(Modifier.testTag("event-filters"), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(if (birthdayList) listOf("Upcoming", "Today", "All") else listOf("Upcoming", "Today", "Groups", "All")) { option ->
+                        items(if (birthdayList) listOf("Upcoming", "Today", "All") else listOf("Upcoming", "Today", "Groups", "All", "Hidden events")) { option ->
                             FilterChip(selected = filter == option, onClick = { filter = option }, label = { Text(option) })
                         }
                     } }
-                    if (visible.isEmpty()) item { EmptyEvents("", filter, state.deadlines.none { if (birthdayList) it.kind == "birthday" else it.kind != "birthday" }, onSync) }
+                    if (visible.isEmpty() && filter == "Hidden events") item { Text("No hidden calendar events. Expand an imported event to hide it in TOKI.") }
+                    else if (visible.isEmpty()) item { EmptyEvents("", filter, state.deadlines.none { if (birthdayList) it.kind == "birthday" else it.kind != "birthday" }, onSync) }
                     itemsIndexed(visible, key = { _, event -> event.id }) { index, event ->
                         val start = state.previews[event.id]?.nextStart ?: event.startMillis
                         val day = Instant.ofEpochMilli(start).atZone(ZoneId.systemDefault()).toLocalDate()
@@ -338,7 +340,7 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
                                 Modifier.padding(top = if (index == 0) 0.dp else 6.dp, start = 4.dp),
                                 style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            EventCard(event, state.previews[event.id], permissionReady, now, border, state.busy, event.id in state.deletableIds, state.deletePermissionsLoaded, focused = revealId == event.id, revealVersion = revealVersion, onExpansionChanged = { recordExpansion(event.id, it) }, onEdit = { onEdit(event.id) }, onDelete = { deletingId = event.id })
+                            EventCard(event, state.previews[event.id], permissionReady, now, border, state.busy, event.id in state.deletableIds, state.deletePermissionsLoaded, focused = revealId == event.id, revealVersion = revealVersion, onExpansionChanged = { recordExpansion(event.id, it) }, onEdit = { onEdit(event.id) }, onDelete = { deletingId = event.id }, canHide = state.calendarHidingAvailable, onHide = { onHideCalendar(event.id, !event.hidden) })
                         }
                     }
                     }
@@ -486,13 +488,13 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
     }
 }
 
-@Composable private fun EventCard(event: Deadline, preview: EventPreview?, permissionsReady: Boolean, now: Long, dateColor: Color, busy: Boolean, canDelete: Boolean, permissionsLoaded: Boolean, onExpansionChanged: (Boolean) -> Unit = {}, focused: Boolean = false, revealVersion: Int = 0, onEdit: () -> Unit, onDelete: () -> Unit) {
+@Composable private fun EventCard(event: Deadline, preview: EventPreview?, permissionsReady: Boolean, now: Long, dateColor: Color, busy: Boolean, canDelete: Boolean, permissionsLoaded: Boolean, onExpansionChanged: (Boolean) -> Unit = {}, focused: Boolean = false, revealVersion: Int = 0, onEdit: () -> Unit, onDelete: () -> Unit, canHide: Boolean = false, onHide: () -> Unit = {}) {
     var expanded by rememberSaveable(event.id) { mutableStateOf(focused) }
     LaunchedEffect(expanded) { onExpansionChanged(expanded) }
     LaunchedEffect(focused, revealVersion) { if (focused) expanded = true else if (revealVersion > 0) expanded = false }
     val time = preview?.nextStart ?: event.startMillis
     val reminderPassed = preview?.nextStart != null && EventTime.reminderAt(preview.nextStart, event.reminderMinutes) <= now
-    val status = when { event.kind == "calendar" && event.allDay -> "All day"; !event.enabled -> "Off"; preview?.problem != null -> "Needs attention"; preview?.nextStart == null -> "Finished"; reminderPassed -> if (event.kind == "birthday") "Today" else "Due soon"; !permissionsReady -> "Setup needed"; else -> "Alarm on" }
+    val status = when { event.hidden -> "Hidden"; event.kind == "calendar" && event.allDay -> "All day"; !event.enabled -> "Off"; preview?.problem != null -> "Needs attention"; preview?.nextStart == null -> "Finished"; reminderPassed -> if (event.kind == "birthday") "Today" else "Due soon"; !permissionsReady -> "Setup needed"; else -> "Alarm on" }
     val active = status == "Alarm on"
     Card(border = BorderStroke(1.5.dp, dateColor), modifier = Modifier.testTag("event-${event.id}"), shape = MaterialTheme.shapes.small, onClick = { expanded = !expanded }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -528,6 +530,7 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
                 if (event.kind != "birthday" && event.timezone != ZoneId.systemDefault().id)
                     Text("Event time: ${date(time, event.timezone)} · ${event.timezone}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(when {
+                    event.hidden -> "Hidden in TOKI. No alarm is scheduled. Restore it to show it again; Outlook is unchanged."
                     event.kind == "calendar" && event.allDay -> "All-day calendar entry. No alarm is scheduled."
                     !event.enabled -> "This event or your personal reminder is switched off. Enable it in PocketBase, then sync."
                     preview?.problem != null -> preview.problem
@@ -540,6 +543,11 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
                 if (event.description.isNotBlank()) Text(event.description, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (event.rrule.isNotBlank()) Text("Repeat rule: ${event.rrule}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (event.kind == "calendar") Text("Imported calendar event. Edit or delete it in Outlook, then sync TOKI after the next calendar import.", style = MaterialTheme.typography.bodySmall)
+                if (event.kind == "calendar") {
+                    if (canHide && event.externalKey.isNotBlank()) TextButton(onClick = onHide, enabled = !busy) {
+                        Text(if (event.hidden) "Restore event" else "Hide in TOKI")
+                    } else Text("Sync after backend setup to enable hiding.", style = MaterialTheme.typography.bodySmall)
+                }
                 if (canDelete) Row {
                     TextButton(onClick = onEdit, enabled = !busy) { Text("Edit event") }
                     TextButton(onClick = onDelete, enabled = !busy) { Text("Delete event", color = MaterialTheme.colorScheme.error) }

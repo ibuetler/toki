@@ -13,7 +13,7 @@ import kotlinx.coroutines.withContext
 
 data class EventPreview(val nextStart: Long? = null, val problem: String? = null, val nextReminderStart: Long? = null, val visibleUntil: Long? = null)
 
-data class TokiState(val tasks: List<TokiTask> = emptyList(), val tasksAvailable: Boolean = false, val taskError: String? = null, val taskSavedVersion: Int = 0, val editing: EditableEvent? = null, val editError: String? = null, val birthdaysAvailable: Boolean = false, val deletableIds: Set<String> = emptySet(), val deletePermissionsLoaded: Boolean = false, val createError: String? = null, val createdVersion: Int = 0, val ready: Boolean = false, val session: Session? = null,
+data class TokiState(val calendarHidingAvailable: Boolean = false, val tasks: List<TokiTask> = emptyList(), val tasksAvailable: Boolean = false, val taskError: String? = null, val taskSavedVersion: Int = 0, val editing: EditableEvent? = null, val editError: String? = null, val birthdaysAvailable: Boolean = false, val deletableIds: Set<String> = emptySet(), val deletePermissionsLoaded: Boolean = false, val createError: String? = null, val createdVersion: Int = 0, val ready: Boolean = false, val session: Session? = null,
     val deadlines: List<Deadline> = emptyList(), val busy: Boolean = false,
     val message: String? = null, val lastSync: Long = 0, val scheduled: Int = 0,
     val exactAllowed: Boolean = false, val notificationsAllowed: Boolean = false, val fullScreenAllowed: Boolean = false, val testAt: Long = 0, val testDelay: Long = -1, val previews: Map<String, EventPreview> = emptyMap())
@@ -52,7 +52,7 @@ class TokiViewModel(application: Application) : AndroidViewModel(application) {
         val records = graph.database.deadlines().all()
         val tasks = graph.database.tasks().all()
         val previews = eventPreviews(records + tasks.mapNotNull { it.alarm() }, System.currentTimeMillis())
-        mutable.value = mutable.value.copy(tasks = tasks, tasksAvailable = graph.prefs.getBoolean("tasksAvailable", false), birthdaysAvailable = graph.prefs.getBoolean("birthdaysAvailable", false), deletableIds = graph.prefs.getStringSet("deletableIds", emptySet()).orEmpty().toSet(), deletePermissionsLoaded = graph.prefs.contains("deletableIds"), ready = true, session = graph.sessions.load(),
+        mutable.value = mutable.value.copy(calendarHidingAvailable = graph.prefs.getBoolean("calendarHidingAvailable", false), tasks = tasks, tasksAvailable = graph.prefs.getBoolean("tasksAvailable", false), birthdaysAvailable = graph.prefs.getBoolean("birthdaysAvailable", false), deletableIds = graph.prefs.getStringSet("deletableIds", emptySet()).orEmpty().toSet(), deletePermissionsLoaded = graph.prefs.contains("deletableIds"), ready = true, session = graph.sessions.load(),
             deadlines = records, previews = previews, lastSync = graph.prefs.getLong("lastSync", 0),
             scheduled = count, testAt = graph.reminders.pendingTestAt(), testDelay = graph.reminders.lastTestDelay(), fullScreenAllowed = graph.reminders.fullScreenAllowed(), exactAllowed = graph.reminders.exactAllowed(), notificationsAllowed = graph.reminders.notificationsAllowed())
     }
@@ -69,6 +69,20 @@ class TokiViewModel(application: Application) : AndroidViewModel(application) {
                     else -> "Could not complete the operation. Please try again."
                 }, ready = true)
             } finally { mutable.value = mutable.value.copy(busy = false) }
+        }
+    }
+    fun hideCalendarEvent(id: String, hidden: Boolean) {
+        val event = mutable.value.deadlines.find { it.id == id && it.kind == "calendar" } ?: return
+        if (!mutable.value.calendarHidingAvailable) return
+        action {
+            val session = graph.api.refresh(requireNotNull(graph.sessions.load()))
+            graph.sessions.save(session)
+            graph.api.setCalendarHidden(session, event.externalKey, hidden)
+            graph.setCalendarHidden(id, hidden, session.userId)
+            reload()
+            mutable.value = mutable.value.copy(message = if (hidden)
+                "Event hidden in TOKI. Its future alarm on this phone is cancelled. Outlook is unchanged."
+                else "Event restored in TOKI. Future reminders are enabled again.")
         }
     }
     fun clearTaskError() { mutable.value = mutable.value.copy(taskError = null) }
