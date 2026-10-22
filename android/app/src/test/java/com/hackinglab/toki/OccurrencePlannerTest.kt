@@ -20,6 +20,19 @@ class OccurrencePlannerTest {
             }
         }
     }
+    @Test fun importedAllDayVisibleUntilEndWithoutAlarm() {
+        val e = event("2026-10-21T22:00:00Z").apply {
+            kind = "calendar"; allDay = true; enabled = false
+            endMillis = millis("2026-10-23T22:00:00Z")
+        }
+        assertNull(OccurrencePlanner.next(e, millis("2026-10-20T00:00:00Z")))
+        assertEquals(e.endMillis, OccurrencePlanner.nextEvent(e, millis("2026-10-23T12:00:00Z"))!!.visibleUntilMillis)
+        assertNull(OccurrencePlanner.nextEvent(e, e.endMillis))
+    }
+    @Test fun importedMeetingUsesFiveMinuteAlarm() {
+        val e = event("2026-10-22T10:00:00Z").apply { kind = "calendar" }
+        assertEquals(millis("2026-10-22T09:55:00Z"), OccurrencePlanner.next(e, millis("2026-10-22T09:00:00Z"))!!.reminderMillis)
+    }
     @Test fun agendaKeepsOneOffAfterReminderUntilDeadline() {
         val e = event("2026-10-20T14:30:00Z").apply { reminderMinutes = 30 }
         val afterAlarm = millis("2026-10-20T14:01:00Z")

@@ -13,6 +13,10 @@ object OccurrencePlanner {
     fun nextEvent(event: Deadline, afterMillis: Long): Occurrence? = nextOccurrence(event, afterMillis, true)
     private fun nextOccurrence(event: Deadline, afterMillis: Long, byDeadline: Boolean): Occurrence? {
         if (event.kind == "birthday") return BirthdaySpec.from(event).next(afterMillis, byDeadline)
+        if (event.kind == "calendar" && event.allDay) {
+            if (!byDeadline || event.endMillis <= afterMillis) return null
+            return Occurrence(event.startMillis, Long.MAX_VALUE, event.endMillis)
+        }
         require(event.rrule.isBlank() || event.recurrenceLoaded) { "Sync once to load recurrence exceptions." }
         require(!event.allDay) { "All-day reminder time is not configured yet." }
         require(event.reminderMinutes in 0..525600) { "Invalid reminder offset." }

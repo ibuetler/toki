@@ -190,6 +190,23 @@ class PocketBase(internal val connect: (String) -> HttpURLConnection = { URI(BAS
             tasksAvailable = false
             emptyList()
         }
-        return DeadlineSnapshot(records + birthdayRecords, deletableIds, birthdaysAvailable, tasks, tasksAvailable)
+        val calendars = try { all("calendar_events", session.token) } catch (error: ApiFailure) {
+            if (error.status != 404) throw error
+            emptyList()
+        }
+        val imported = calendars.map { json ->
+            Deadline().apply {
+                kind = "calendar"; id = "calendar:" + json.getString("id")
+                title = json.getString("title")
+                sourceNames = json.getString("source_names")
+                description = listOf(json.optString("description"), json.optString("location").takeIf { it.isNotBlank() }?.let { "Location: $it" }.orEmpty()).filter { it.isNotBlank() }.joinToString("\n\n")
+                timezone = json.getString("timezone")
+                startMillis = EventTime.parse(json.getString("start_at"))
+                endMillis = EventTime.parse(json.getString("end_at"))
+                allDay = json.getBoolean("all_day")
+                reminderMinutes = 5; enabled = !allDay; recurrenceLoaded = true
+            }
+        }
+        return DeadlineSnapshot(records + birthdayRecords + imported, deletableIds, birthdaysAvailable, tasks, tasksAvailable)
     }
 }

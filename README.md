@@ -88,7 +88,7 @@ This excludes November 2 and adds November 4 at 09:00 local time. These exceptio
 
 8. Use Android **Back** to return from details, scrolled lists, Alarms or Account to the top of Agenda. Open forms, search and dialogs close first. Alarms and Account also offer **Return to main page**. Only Back from the main overview leaves TOKI. See the [navigation guide](docs/ANDROID_GUIDE.md#return-to-the-main-page).
 
-Expand an event and tap **Edit event** to update a regular event or birthday in Android; saving syncs changes and rebuilds reminders. Group event creation, memberships, and personal reminder preferences are managed in PocketBase. Background sync and all-day alarms are not implemented. See the [Android guide](android/README.md) for limitations and troubleshooting.
+Expand an event and tap **Edit event** to update a regular event or birthday in Android; saving syncs changes and rebuilds reminders. Group event creation, memberships, and personal reminder preferences are managed in PocketBase. Android does not poll in the background. Imported all-day calendar entries are shown without alarms. See the [Android guide](android/README.md) for limitations and troubleshooting.
 
 ## Repository layout
 
@@ -155,12 +155,16 @@ The suite creates disabled temporary deadlines with a `PBSEC-` prefix, updates t
 
 API tests cover authentication, own-record operations, cross-user and anonymous access attempts, recurrence exception persistence, and cleanup. Two local Python `dateutil` checks cover recurrence expansion and preservation of 09:00 Zurich time across the spring daylight-saving transition.
 
-The Python recurrence checks do not execute Android code or validate audible delivery. Android has separate unit and phone UI tests; navigation verification on October 22, 2026 passed 40 navigation/form UI checks, together with build and lint. The 45 unit tests and separate screenshot capture were last verified on October 21, 2026. See the [Android testing guide](android/README.md#build-and-verify). Ownership-transfer tests target another real user. List checks filter by the known temporary record ID to avoid pagination gaps, and anonymous list access must not expose that record. Unexpectedly created records are tracked for cleanup, with other configured users tried if ownership has changed. These checks do not constitute a complete security audit.
+The Python recurrence checks do not execute Android code or validate audible delivery. Android has separate unit and phone UI tests; verification on October 22, 2026 passed 48 unit tests, the 40 existing navigation checks, the cache migration check, and four new calendar UI/API checks, together with build and lint. The separate screenshot capture was last verified on October 21, 2026. See the [Android testing guide](android/README.md#build-and-verify). Ownership-transfer tests target another real user. List checks filter by the known temporary record ID to avoid pagination gaps, and anonymous list access must not expose that record. Unexpectedly created records are tracked for cleanup, with other configured users tried if ownership has changed. These checks do not constitute a complete security audit.
+
+## Calendar imports
+
+Published Outlook calendars can be imported on Jupiter every four hours, with a recipient TOKI account configured per calendar. Android downloads changes when opened or manually synced, without background polling. Imported meetings show source labels, deduplicate by calendar identity and use five-minute reminders; all-day entries have no alarm. A private exclusion list hides exact event titles across all imported calendars and removes existing matching imports on the next successful run. See the [calendar integration guide](backend/calendar-sync/README.md).
 
 ## Next steps
 
 1. Retain the verified migration backup and maintain the [deployment and recovery instructions](backend/GROUPS.md). Group sharing and SMTP are working on Jupiter.
 2. Validate a fresh backend installation with the strengthened regression suite.
 3. Define the all-day reminder-time policy. Timed recurrence, time zones, exclusions/additions, and shared Python/Kotlin fixtures are implemented.
-4. Extend Android with background synchronization, group event creation, and personal preference controls.
+4. Consider group event creation and personal preference controls in Android. Synchronization runs when the app opens or on manual refresh; background polling is intentionally omitted.
 5. Verify reminders on devices, including offline operation, reboot recovery, permission changes, and edited or deleted events.

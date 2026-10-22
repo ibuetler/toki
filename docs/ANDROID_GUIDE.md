@@ -88,9 +88,15 @@ Open **Alarms** and allow **Notifications** and **Exact alarms**. Allow **Lock-s
 
 Alarms use the phone's alarm volume, loop until dismissed, and stop after two minutes. DND, notification settings and device restrictions still apply. Cached reminders can ring offline; force-stopping the app prevents delivery until it is reopened.
 
+## Outlook calendar events
+
+Imported meetings appear in **Events**, with their source calendar names. A meeting shared across calendars appears once when its calendar identifiers match, with all matching sources listed. Imported items are read-only: make changes in Outlook. A server-side exclusion list can hide selected event titles across all imported calendars. It matches complete titles without regard to case; manually created TOKI events are unaffected. After the next successful import, sync TOKI to remove excluded entries and their alarms. Removing an exclusion allows matching items to return. See [how to maintain exclusions](../backend/calendar-sync/README.md#exclude-unwanted-events). Timed meetings ring five minutes before; all-day calendar entries have no alarm.
+
+Jupiter checks the feeds every four hours by default. After that import, open TOKI or press refresh to update the list and alarms on your phone. Outlook publication may introduce additional delay. See the [calendar integration guide](../backend/calendar-sync/README.md).
+
 ## Sync and offline use
 
-Tap refresh or **Account → Sync now** after changes made elsewhere. Events/birthdays sync after creation and editing; task writes update the local cache directly. There is no periodic background sync yet.
+TOKI syncs when launched or brought back to the foreground. Tap refresh or **Account → Sync now** whenever you want another sync. Events/birthdays sync after creation and editing; task writes update the local cache directly. Android does not poll for updates in the background.
 
 Cached lists and global search work offline. Revoked access and remote edits/deletions are learned on the next successful sync. Signing out clears the session, cached events/birthdays/tasks and scheduled reminders.
 

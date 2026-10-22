@@ -18,6 +18,15 @@ import androidx.lifecycle.ViewModelProvider
 import com.hackinglab.toki.ui.theme.TOKITheme
 
 class MainActivity : ComponentActivity() {
+    private var firstStart = true
+    override fun onStart() {
+        super.onStart()
+        // Initial ViewModel loading syncs once. Later foreground opens sync again;
+        // no timer or background worker is registered.
+        if (firstStart) firstStart = false
+        else ViewModelProvider(this)[TokiViewModel::class.java].sync()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()

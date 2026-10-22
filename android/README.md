@@ -8,7 +8,7 @@ Read the [illustrated Android user guide](../docs/ANDROID_GUIDE.md) for screensh
 
 - Email/password sign-in with PocketBase user authentication (no superuser credentials).
 - Passwords are never saved. Session tokens are encrypted with an Android Keystore AES-GCM key; app data is excluded from cloud backup/device transfer.
-- Manual sync fetches every page of accessible groups, deadlines, personal reminder preferences, birthdays and tasks. The session is refreshed first. A complete snapshot replaces Room data in one transaction; a failed fetch keeps the previous snapshot.
+- Startup and manual sync fetch every page of accessible groups, deadlines, personal reminder preferences, birthdays, tasks and imported calendar events. The session is refreshed first. A complete snapshot replaces Room data in one transaction; a failed fetch keeps the previous snapshot.
 - Private/group labels, phone-local timestamps (saved event-zone time is also shown in expanded details when different), and effective per-user reminder settings. Revoked/deleted records disappear on the next successful sync and their scheduled alarms are cancelled.
 - Timed one-off and recurring events use Android alarm-clock scheduling (visible in the system next-alarm indicator) and start a foreground alarm player using the alarm audio stream. Sound loops until dismissed, with a two-minute timeout. User-granted notification and exact-alarm access are required. Permission status and the next alarm are visible in the app.
 - Cached reminders are restored after reboot (after unlock), app update, clock/time-zone changes, and granting exact-alarm access. Signing out clears cache, token, notifications, and scheduled reminders.
@@ -32,6 +32,12 @@ Read the [illustrated Android user guide](../docs/ANDROID_GUIDE.md) for screensh
 - **Alarms** brings permission setup, the 30-second sound test, and delivery timing together.
 - **Account** shows the connected account, private/shared event counts, manual sync, and sign-out.
 - Light and dark appearances follow the phone setting. Group creation and membership management remain in PocketBase.
+
+## Imported Outlook calendars
+
+Imported meetings appear in Events with source names such as **Compass Security · Hacking-Lab**. Shared copies with matching calendar identifiers appear once. These entries are read-only: edit or delete them in Outlook. Timed imports always remind five minutes before; all-day imports have no alarm and remain visible until their end date. Source names are searchable. Jupiter’s private exclusion list can hide exact event titles across all source calendars. Matching ignores case and surrounding whitespace. A successful import removes matching entries from PocketBase; the next Android sync removes their cached copies and cancels their alarms. Manual TOKI events are unaffected. Manage the list in the [server exclusion configuration](../backend/calendar-sync/README.md#exclude-unwanted-events).
+
+Jupiter imports the feeds every four hours by default. Android syncs on launch, when returning to the foreground, and on manual refresh; it does not register a background sync job. Changes reach phone alarms only after that sync. See the [calendar integration guide](../backend/calendar-sync/README.md).
 
 ## Navigation
 
@@ -74,7 +80,7 @@ The recurrence set is DTSTART plus RRULE plus RDATE, minus EXDATE; duplicates co
 
 Only the next occurrence whose reminder is still in the future is registered per event. After delivery, only that event advances to its next occurrence, without network access; simultaneous events retain their own alarms. Sync, reboot, app update, and clock changes also rebuild schedules. Missed reminder times are not replayed on an ordinary sync. Invalid rules affect only their event, not the entire local schedule.
 
-Room cache versions 1–3 migrate to version 4 without dropping data. Version 4 adds a separate tasks table. Version 2 added recurrence exceptions; version 3 adds birthday metadata. Old cached recurring events are not armed until one successful **Sync now** loads their exception arrays. This avoids ringing for dates that were excluded on the server. The agenda keeps the current occurrence visible until its deadline, even after its reminder time has passed (shown as Due soon). Alarm scheduling independently advances to the next future reminder, so keeping an event visible does not ring it again. At the deadline, a recurring series advances to its next occurrence; past one-off events remain available under All.
+Room cache versions 1–4 migrate to version 5 without dropping data. Version 5 adds imported-calendar source names and end timestamps. Version 4 adds a separate tasks table. Version 2 added recurrence exceptions; version 3 adds birthday metadata. Old cached recurring events are not armed until one successful **Sync now** loads their exception arrays. This avoids ringing for dates that were excluded on the server. The agenda keeps the current occurrence visible until its deadline, even after its reminder time has passed (shown as Due soon). Alarm scheduling independently advances to the next future reminder, so keeping an event visible does not ring it again. At the deadline, a recurring series advances to its next occurrence; past one-off events remain available under All.
 
 Eight shared cases live in `backend/fixtures/recurrence.tsv` and are checked by both Kotlin tests and the offline Python reference runner:
 
@@ -86,11 +92,12 @@ python backend/pocketbase-tests/recurrence_fixtures.py
 
 Generic all-day deadlines can be inspected under **All** but are **not scheduled** until an all-day reminder-time policy is defined. The birthday type has its own explicit local reminder time and is scheduled. The APK creates private timed events; creating group events, managing memberships, and changing personal reminder preferences remain in PocketBase.
 
-Sync runs on sign-in, after event/birthday creation or editing, or explicitly through refresh/**Sync now**. Successful task writes update their cached records directly and rebuild reminders. There is no periodic background sync yet. Offline devices retain their last known access until the next successful sync. Exact-alarm availability, notification/channel settings, DND, alarm volume, OEM background restrictions, and force-stop behavior affect delivery. Alarm audio uses the alarm stream rather than the notification stream. The lock-screen Dismiss screen uses a full-screen intent with user-controlled access; without that access, tap the alarm notification or its Dismiss action. Alarm volume and DND still apply. Overlapping alarms share one player and Dismiss control, with the latest title shown.
+Sync runs on sign-in, app launch/return to the foreground, after event/birthday creation or editing, or explicitly through refresh/**Sync now**. Successful task writes update their cached records directly and rebuild reminders. There is no periodic background sync yet. Offline devices retain their last known access until the next successful sync. Exact-alarm availability, notification/channel settings, DND, alarm volume, OEM background restrictions, and force-stop behavior affect delivery. Alarm audio uses the alarm stream rather than the notification stream. The lock-screen Dismiss screen uses a full-screen intent with user-controlled access; without that access, tap the alarm notification or its Dismiss action. Alarm volume and DND still apply. Overlapping alarms share one player and Dismiss control, with the latest title shown.
 
 ## Build and verify
 
-Navigation verification on **22 October 2026**: **40 navigation/form UI checks passed**, and build and lint passed. These cover returning from subpages, direct and summary-opened details, modal dismissal, and the main-page exit boundary. The **45 unit tests** and separate ten-screen capture fixture were last verified on **21 October 2026**. Screenshots use fictional in-memory data; these checks do not establish audible delivery, offline delivery or reboot behaviour. Earlier API/cache/migration checks are described in the backend guides and device test sources.
+Calendar and navigation verification on **22 October 2026**: **48 unit tests passed**; build and lint passed. The 40 existing navigation/form checks and the cache migration check passed, followed by the new source-label/read-only UI check and three calendar API mapping checks. The API checks cover pagination, five-minute reminders, all-day imports, old backends and failed snapshots. The separate ten-screen capture fixture was last verified on **21 October 2026**. Screenshots use fictional in-memory data; these checks do not establish audible delivery, offline delivery or reboot behaviour. Backend importer tests and deployment verification are described in the [calendar guide](../backend/calendar-sync/README.md).
+
 
 Use Android Studio's configured JDK/SDK and the committed Gradle wrapper:
 

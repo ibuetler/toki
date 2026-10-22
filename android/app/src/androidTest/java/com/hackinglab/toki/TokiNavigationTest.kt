@@ -44,6 +44,27 @@ class TokiNavigationTest {
             }
         }
     }
+    @Test fun importedCalendarShowsAllSourcesAndReadOnlyDetails() {
+        val now = System.currentTimeMillis()
+        val imported = Deadline().apply {
+            id = "calendar:fixture"; kind = "calendar"; title = "Shared calendar meeting"
+            sourceNames = "Compass Security · Hacking-Lab"; enabled = true
+            startMillis = now + 3_600_000; reminderMinutes = 5; recurrenceLoaded = true
+        }
+        screen.setContent {
+            TOKITheme {
+                TokiScreen(TokiState(ready = true, session = Session("preview", "preview", "hello@example.com"),
+                    deadlines = listOf(imported), deletePermissionsLoaded = true,
+                    previews = mapOf(imported.id to EventPreview(imported.startMillis, nextReminderStart = imported.startMillis))),
+                    onLogin = { _, _ -> }, onSync = {}, onLogout = {}, onTest = {}, onNotifications = {}, onExact = {}, onFullScreen = {})
+            }
+        }
+        screen.onNodeWithTag("next-event-tile").performClick()
+        screen.onNodeWithText("Compass Security · Hacking-Lab · One-time").assertExists()
+        screen.onNodeWithText("Imported calendar event. Edit or delete it in Outlook, then sync TOKI after the next calendar import.").performScrollTo().assertIsDisplayed()
+        screen.onNodeWithText("Edit event").assertDoesNotExist()
+        screen.onNodeWithText("Delete event").assertDoesNotExist()
+    }
     @Test fun taskQuickCaptureNeedsOnlyTitleAndUsesNormalPriority() {
         var saved: com.hackinglab.toki.data.TaskDraft? = null
         render(onSaveTask = { draft, id -> org.junit.Assert.assertNull(id); saved = draft })

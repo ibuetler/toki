@@ -15,9 +15,11 @@ import time
 
 container, app_name, work_name, mode = sys.argv[1:5]
 collection = sys.argv[5] if len(sys.argv) > 5 else 'birthdays'
-if collection not in {'birthdays', 'tasks'}: raise RuntimeError('Unreviewed migration')
-MIGRATION = {'birthdays': '1792540800_birthdays.js', 'tasks': '1792627200_tasks.js'}[collection]
+if collection not in {'birthdays', 'tasks', 'calendar_events'}: raise RuntimeError('Unreviewed migration')
+MIGRATION = {'birthdays': '1792540800_birthdays.js', 'tasks': '1792627200_tasks.js', 'calendar_events': '1792713600_calendar_events.js'}[collection]
 required_fields = ({'owner', 'name', 'month', 'day', 'birth_year', 'reminder_hour', 'reminder_minute', 'leap_day_policy', 'enabled'} if collection == 'birthdays' else {'owner', 'title', 'notes', 'priority', 'completed', 'remind_at'})
+if collection == 'calendar_events':
+    required_fields = {'owner', 'external_key', 'title', 'description', 'location', 'source_names', 'start_at', 'end_at', 'timezone', 'all_day', 'enabled', 'reminder_minutes'}
 app, work = Path(app_name), Path(work_name)
 apply = mode == 'apply'
 
@@ -27,10 +29,12 @@ def command(*args):
 
 
 def snapshot(source, target, offline=False):
-    if offline:
-        wal = Path(str(source) + '-wal')
-        if wal.exists() and wal.stat().st_size: raise RuntimeError('Unexpected uncheckpointed offline WAL; refusing to ignore it')
-    uri = source.resolve().as_uri() + ('?mode=ro&immutable=1' if offline else '?mode=ro')
+    # Stopped SQLite databases may retain a committed WAL. Verify the extracted
+    # archive with SQLite's normal read-only WAL recovery, never immutable=1
+    # while a WAL is present (immutable would silently omit committed records).
+    wal = Path(str(source) + '-wal')
+    immutable = offline and not (wal.exists() and wal.stat().st_size)
+    uri = source.resolve().as_uri() + ('?mode=ro&immutable=1' if immutable else '?mode=ro')
     with sqlite3.connect(uri, uri=True, timeout=15) as source_db:
         with sqlite3.connect(target) as destination:
             started = time.monotonic()
@@ -59,8 +63,10 @@ def verify(before_file, after_file):
                     raise RuntimeError('Unexpected schema/history changes: ' + table)
             elif old != new: raise RuntimeError('Existing table changed: ' + table)
         row = after.execute("SELECT listRule,viewRule,createRule,updateRule,deleteRule FROM _collections WHERE name=?", (collection,)).fetchone()
-        if not row or not all(row): raise RuntimeError(collection + ' rules missing')
-        for rule in row:
+        if not row or (collection != 'calendar_events' and not all(row)): raise RuntimeError(collection + ' rules missing')
+        if collection == 'calendar_events' and (not all(row[:2]) or any(rule is not None for rule in row[2:])):
+            raise RuntimeError('Imported calendars must be owner-readable and client-write-locked')
+        for rule in (row[:2] if collection == 'calendar_events' else row):
             if 'owner = @request.auth.id' not in rule: raise RuntimeError(collection + ' owner isolation missing')
         fields = {r[1] for r in after.execute('PRAGMA table_info(' + quote(collection) + ')')}
         if not required_fields <= fields:

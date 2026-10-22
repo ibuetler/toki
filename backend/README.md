@@ -4,7 +4,7 @@
 
 The files in `docker/Dockerfile` and `docker/docker-compose.yml` were copied from Jupiter. The Dockerfile defaults to PocketBase **0.40.5**, with Alpine 3.22 and amd64/arm64 support. This identifies the build configuration, not an independently inspected running Jupiter binary or image digest. Compose uses Traefik's external `transit` network, the `websecure` entrypoint, and `pocketbase.hacking-lab.com`, forwarding to port 8090.
 
-`pb_migrations/1792454400_toki_schema.js` imports the original `users` and `deadlines` definitions extracted read-only from the supplied local database copy. The subsequent group, private-birthday and private-task migrations extend this baseline; `schema/collections.json` describes the combined target schema. See [group events](GROUPS.md) for its model, tests, and existing-server rollout instructions. The baseline preserves collection IDs, fields, indexes, access rules, password-auth configuration, and authentication feature enablement. It excludes records, server settings, token signing secrets, OAuth provider credentials, email templates, and custom token lifetimes; omitted settings use PocketBase defaults. This is a reproducible application schema, not a complete server backup.
+`pb_migrations/1792454400_toki_schema.js` imports the original `users` and `deadlines` definitions extracted read-only from the supplied local database copy. The subsequent group, private-birthday, private-task and imported-calendar migrations extend this baseline; `schema/collections.json` describes the combined target schema. See [group events](GROUPS.md) for its model, tests, and existing-server rollout instructions. The baseline preserves collection IDs, fields, indexes, access rules, password-auth configuration, and authentication feature enablement. It excludes records, server settings, token signing secrets, OAuth provider credentials, email templates, and custom token lifetimes; omitted settings use PocketBase defaults. This is a reproducible application schema, not a complete server backup.
 
 The copied `docker/pb_data/` remains ignored by Git. `.dockerignore` also excludes it from image build contexts. Never commit database files, backups, real environment files, account records, or SMTP credentials.
 
@@ -55,3 +55,16 @@ References: [PocketBase migrations](https://pocketbase.io/docs/js-migrations/), 
 ## Lightweight tasks
 
 Private tasks are a separate collection with four priorities, optional one-off reminders, and completion status. See [task schema, testing and deployment](TASKS.md). The additive migration is `1792627200_tasks.js`; existing deadlines and birthdays are unchanged.
+
+## Published calendar feeds
+
+The private, client-read-only `calendar_events` collection stores expanded ICS occurrences separately from manually created deadlines. The importer runs every four hours by default. Each calendar section uses `user = TOKI_SIGN_IN_EMAIL` to select the existing recipient account; shared meetings are deduplicated within each account. It supports a private, case-insensitive exact-title exclusion list applied after deduplication; excluded imports are removed on the next successful run. See the [calendar importer](calendar-sync/README.md) for configuration, exclusions, scheduling and recovery.
+
+Run an import immediately from macOS:
+
+```sh
+ssh root@jupiter 'systemctl start toki-calendar-sync.service'
+ssh root@jupiter 'journalctl -u toki-calendar-sync.service -n 20 --no-pager'
+```
+
+Then open TOKI or press Sync to update the phone’s events and alarms. The server import and the Android sync are separate steps.

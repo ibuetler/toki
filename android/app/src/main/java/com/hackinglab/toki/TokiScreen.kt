@@ -492,21 +492,21 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
     LaunchedEffect(focused, revealVersion) { if (focused) expanded = true else if (revealVersion > 0) expanded = false }
     val time = preview?.nextStart ?: event.startMillis
     val reminderPassed = preview?.nextStart != null && EventTime.reminderAt(preview.nextStart, event.reminderMinutes) <= now
-    val status = when { !event.enabled -> "Off"; preview?.problem != null -> "Needs attention"; preview?.nextStart == null -> "Finished"; reminderPassed -> if (event.kind == "birthday") "Today" else "Due soon"; !permissionsReady -> "Setup needed"; else -> "Alarm on" }
+    val status = when { event.kind == "calendar" && event.allDay -> "All day"; !event.enabled -> "Off"; preview?.problem != null -> "Needs attention"; preview?.nextStart == null -> "Finished"; reminderPassed -> if (event.kind == "birthday") "Today" else "Due soon"; !permissionsReady -> "Setup needed"; else -> "Alarm on" }
     val active = status == "Alarm on"
     Card(border = BorderStroke(1.5.dp, dateColor), modifier = Modifier.testTag("event-${event.id}"), shape = MaterialTheme.shapes.small, onClick = { expanded = !expanded }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(Modifier.heightIn(min = 48.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.widthIn(min = 50.dp)) {
                     if (event.kind == "birthday") Glyph(R.drawable.ic_cake, Modifier.size(24.dp))
-                    else Text(date(time, pattern = "HH:mm"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    else Text(if (event.allDay) "All day" else date(time, pattern = "HH:mm"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Text(date(time, pattern = if (Instant.ofEpochMilli(time).atZone(ZoneId.systemDefault()).year == Instant.ofEpochMilli(now).atZone(ZoneId.systemDefault()).year) "d MMM" else "d MMM yy"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(event.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                         Glyph(if (event.groupName.isBlank()) R.drawable.ic_lock else R.drawable.ic_group, Modifier.size(12.dp))
-                        Text("${event.groupName.ifBlank { "Private" }} · ${if (event.kind == "birthday") "Yearly" else if (event.rrule.isBlank()) "One-time" else repeatLabel(event.rrule)}",
+                        Text("${event.sourceNames.ifBlank { event.groupName.ifBlank { "Private" } }} · ${if (event.kind == "birthday") "Yearly" else if (event.rrule.isBlank()) "One-time" else repeatLabel(event.rrule)}",
                             style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
@@ -528,6 +528,7 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
                 if (event.kind != "birthday" && event.timezone != ZoneId.systemDefault().id)
                     Text("Event time: ${date(time, event.timezone)} · ${event.timezone}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(when {
+                    event.kind == "calendar" && event.allDay -> "All-day calendar entry. No alarm is scheduled."
                     !event.enabled -> "This event or your personal reminder is switched off. Enable it in PocketBase, then sync."
                     preview?.problem != null -> preview.problem
                     preview?.nextStart == null -> "This event has no future deadline."
@@ -538,6 +539,7 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
                 }, style = MaterialTheme.typography.bodyMedium)
                 if (event.description.isNotBlank()) Text(event.description, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (event.rrule.isNotBlank()) Text("Repeat rule: ${event.rrule}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (event.kind == "calendar") Text("Imported calendar event. Edit or delete it in Outlook, then sync TOKI after the next calendar import.", style = MaterialTheme.typography.bodySmall)
                 if (canDelete) Row {
                     TextButton(onClick = onEdit, enabled = !busy) { Text("Edit event") }
                     TextButton(onClick = onDelete, enabled = !busy) { Text("Delete event", color = MaterialTheme.colorScheme.error) }

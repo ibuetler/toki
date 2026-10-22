@@ -1,0 +1,33 @@
+[pocketbase]
+url = http://127.0.0.1:8090
+email = importer-superuser@example.invalid
+password = REPLACE_LOCALLY
+
+[sync]
+# A bounded horizon keeps yearly/unbounded recurring calendars finite.
+past_days = 7
+future_days = 366
+# Floating times and all-day dates use this zone.
+timezone = Europe/Zurich
+max_occurrences = 20000
+
+[calendar:compass]
+name = Compass Security
+url = https://example.invalid/compass.ics
+user = ivan.buetler@compass-security.com
+
+[calendar:hackinglab]
+name = Hacking-Lab
+url = https://example.invalid/hackinglab.ics
+user = ivan.buetler@compass-security.com
+
+[calendar:ost]
+name = OST
+url = https://example.invalid/ost.ics
+user = ivan.buetler@compass-security.com
+
+[exclude]
+# One exact event title per line; case-insensitive, across all calendars.
+# Leave empty to import every title. Exclusions also remove existing imports.
+titles =
+    Marina in CH

@@ -14,6 +14,13 @@ class GlobalSearchTest {
         assertEquals(3, results.map { it.key }.toSet().size)
         assertTrue(results.single { it.kind == "task" }.completed)
     }
+    @Test fun importedSourceNamesAreSearchable() {
+        val event = Deadline().apply { id = "calendar:one"; kind = "calendar"; title = "Review"; sourceNames = "Compass Security · OST" }
+        val found = GlobalSearch.find(listOf(event), emptyList(), "compass")
+        assertEquals(1, found.size)
+        assertEquals("event", found.single().kind)
+        assertEquals(event.sourceNames, found.single().detail)
+    }
     @Test fun groupNamesAndTitlesMatchCaseInsensitively() {
         val event = Deadline().apply { id = "one"; title = "Review"; groupName = "Family" }
         assertEquals(1, GlobalSearch.find(listOf(event), emptyList(), "family").size)

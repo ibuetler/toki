@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh TOKI calendars every four hours
+
+[Timer]
+OnCalendar=*-*-* 00,04,08,12,16,20:00:00
+Persistent=true
+RandomizedDelaySec=60
+Unit=toki-calendar-sync.service
+
+[Install]
+WantedBy=timers.target

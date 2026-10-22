@@ -1,0 +1,18 @@
+[Unit]
+Description=Import published calendars into TOKI
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=toki-calendar
+Group=toki-calendar
+WorkingDirectory=/opt/toki-calendar
+ExecStart=/opt/toki-calendar/.venv/bin/python /opt/toki-calendar/import_calendars.py --config /etc/toki-calendar/config.ini --lock /var/lib/toki-calendar/import.lock --apply
+TimeoutStartSec=10min
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+StateDirectory=toki-calendar

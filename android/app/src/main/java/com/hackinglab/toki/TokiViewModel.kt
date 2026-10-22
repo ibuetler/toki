@@ -23,7 +23,7 @@ class TokiViewModel(application: Application) : AndroidViewModel(application) {
     private val mutable = MutableStateFlow(TokiState())
     val state = mutable.asStateFlow()
     init {
-        action { reload() }
+        action { reload(); graph.sessions.load()?.let { graph.sync(it); reload() } }
         viewModelScope.launch {
             while (true) {
                 delay(1000)

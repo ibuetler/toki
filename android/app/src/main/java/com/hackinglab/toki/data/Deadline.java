@@ -23,6 +23,8 @@ public class Deadline {
     @ColumnInfo(defaultValue = "9") public int birthdayHour = 9;
     @ColumnInfo(defaultValue = "0") public int birthdayMinute;
     @NonNull @ColumnInfo(defaultValue = "'feb28'") public String leapDayPolicy = "feb28";
+    @NonNull @ColumnInfo(defaultValue = "''") public String sourceNames = "";
+    @ColumnInfo(defaultValue = "0") public long endMillis;
     public long startMillis;
     public int reminderMinutes;
     public boolean enabled;
