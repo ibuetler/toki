@@ -29,6 +29,17 @@ Rules are private to their owner in `calendar_exclusions`. A scoped rule can ref
 
 Rules take effect at the next successful Jupiter import. Matching existing imports are removed; disabling/deleting a rule allows them to return. Open TOKI or press Sync afterward to update the phone and cancel removed events' alarms. Rule changes do not modify Outlook. Existing individual hide preferences remain independent.
 
+## Settings, rules and hides at a glance
+
+| Setting | Where it lives | When it takes effect |
+| --- | --- | --- |
+| Calendar name, published URL, enabled flag | Owner-private `calendar_sources`, managed in Android | Next successful server import, then phone sync |
+| Title pattern, scope and rule enabled flag | Owner-private `calendar_exclusions`, managed in Android | Next successful server import, then phone sync |
+| Hide/restore one occurrence | Owner-private `calendar_preferences`, managed in Android | This phone immediately after confirmation; other devices on their next sync |
+| Import interval, horizon and approved hosts | Jupiter runtime config/systemd timer | Next job, or after restarting a changed timer |
+
+Removing a rule does not override an individual hide. Removing a connection deletes its scoped rules and eventually its exclusive imports; it does not modify Outlook. Existing migrated rules remain literal exact-title matches until the user enables wildcard matching.
+
 ## Import behaviour
 
 - Timed occurrences always get a five-minute reminder. ICS alarms are ignored. All-day entries have no alarm and remain visible through their exclusive end date.

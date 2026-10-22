@@ -161,6 +161,16 @@ The Python recurrence checks do not execute Android code or validate audible del
 
 Published Outlook calendars can be imported on Jupiter every four hours, with a recipient TOKI account configured per calendar. Android downloads changes when opened or manually synced, without background polling. Imported meetings show source labels, deduplicate by calendar identity and use five-minute reminders; all-day entries have no alarm. In Android, **Hide in TOKI** hides one imported occurrence and cancels its future alarm; **Events → Hidden events** lets you restore it. Preferences sync per account and survive reimports. Users manage private calendar links and wildcard exclusion rules in **Account → Calendars & exclusions**. Patterns such as `Marina *` can cover all their calendars or one source; matches are removed on the next successful import. See the [calendar integration guide](backend/calendar-sync/README.md).
 
+### Set up calendars and exclusions
+
+1. In Android, open **Account → Calendars & exclusions**.
+2. Tap **Add calendar**, enter its name and published HTTPS ICS URL, then **Save calendar**. Your signed-in account owns the connection automatically.
+3. Tap **Add exclusion**, enter a pattern such as `Marina *`, choose **All my calendars** or one source, review the cached match count, and **Save rule**.
+4. Wait for Jupiter's next import (every four hours by default), or run it manually using the [server commands](backend/calendar-sync/README.md#run-manually-and-change-the-schedule).
+5. Open TOKI or press **Sync** to download the imported changes and update alarms.
+
+Use **Hide in TOKI** for one occurrence, and exclusion rules for repeated title patterns. Rules can be edited, disabled or deleted. **Reload settings** refreshes settings/status; it does not start an import.
+
 ## Next steps
 
 1. Retain the verified migration backup and maintain the [deployment and recovery instructions](backend/GROUPS.md). Group sharing and SMTP are working on Jupiter.

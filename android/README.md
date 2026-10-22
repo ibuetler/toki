@@ -39,6 +39,12 @@ Imported meetings appear in Events with source names such as **Compass Security 
 
 Jupiter imports the feeds every four hours by default. Android syncs on launch, when returning to the foreground, and on manual refresh; it does not register a background sync job. Changes reach phone alarms only after that sync. See the [calendar integration guide](../backend/calendar-sync/README.md).
 
+### Calendar settings refresh behaviour
+
+**Reload settings** fetches connection/rule/status data only. Agenda refresh and **Account → Sync now** download the current backend event snapshot. Neither action fetches the ICS feeds directly; Jupiter performs those imports on its configured schedule. A saved exclusion affects phone alarms after a successful server import followed by Android sync. Personal hide/restore writes update this phone's cache and alarms immediately after confirmation.
+
+The preview uses cached imported occurrences, including hidden ones. It cannot count entries already removed by exclusions or outside the imported window. Existing migrated exact-title rules keep their literal matching mode until edited. See the [illustrated setup guide](../docs/ANDROID_GUIDE.md#connect-calendars-and-exclude-titles).
+
 ### Hide and restore imported events
 
 Expand an imported occurrence and tap **Hide in TOKI**. Use **Events → Hidden events → Restore event** to undo it; swipe the filter row horizontally if needed. Hidden occurrences are excluded from normal lists, global search, summary tiles and alarms. The action needs connectivity and updates the local cache/reminders immediately after server confirmation. Other devices receive it at their next sync. Restoring does not replay a past reminder.

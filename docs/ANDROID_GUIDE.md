@@ -110,6 +110,18 @@ Matching ignores case and covers the whole title. `*` means any number of charac
 
 Saving settings needs a connection. Rules and connection changes apply during the next successful server import, normally every four hours; open TOKI or press Sync afterward to update phone events and alarms. **Reload settings** refreshes settings/status, not the feeds themselves. Deleting a connection removes imports supplied only by it after the next successful import. Removing a rule can let events return, while personal hides remain in place. Outlook and other users are unaffected.
 
+### Which refresh should I use?
+
+| Action | What it does |
+| --- | --- |
+| **Reload settings** in Calendars & exclusions | Reads your saved connections, rules and last import status from PocketBase |
+| Agenda refresh or **Account → Sync now** | Downloads events and hide preferences already stored in PocketBase, then updates phone alarms |
+| Jupiter's scheduled import | Fetches the ICS feeds, applies rules and reconciles imported events in PocketBase |
+
+A new or edited rule does not immediately remove meetings from your phone. Wait for a successful server import, then refresh TOKI. Removing a rule lets matching events return on a later import; an individually hidden occurrence remains hidden until restored.
+
+If a connection shows an error, check that its URL is a published subscription link and that the source is enabled. **Not imported yet** means there has been no successful import for that connection. If your provider is not approved, ask the server administrator to review it. A failed feed preserves your previous imported events rather than deleting them. Offline, cached events remain available, but editing calendar settings needs connectivity.
+
 ### Hide an imported occurrence
 
 Expand an imported event and tap the prominent **Hide in TOKI** button directly below its title. It disappears from the normal event list, search and summary tiles, and its future alarm is cancelled on this phone. Outlook and other users' calendars are unchanged. Hiding requires an internet connection; the preference is applied locally after PocketBase confirms it.
