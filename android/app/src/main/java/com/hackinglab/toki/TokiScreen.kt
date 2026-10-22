@@ -1,5 +1,6 @@
 package com.hackinglab.toki
 
+import androidx.activity.compose.BackHandler
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -99,20 +100,45 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
     var revealVersion by rememberSaveable { mutableIntStateOf(0) }
     val agendaListState = rememberLazyListState()
     val scrollScope = rememberCoroutineScope()
+    var detailReturn by rememberSaveable { mutableStateOf<ArrayList<String>?>(null) }
+    var restorePosition by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     val showBackToTop by remember { derivedStateOf { agendaListState.firstVisibleItemIndex > 1 } }
     LaunchedEffect(tab) { if (tab != 0) agendaListState.scrollToItem(0) }
-    if (searchOpen && signedIn) GlobalSearchScreen(query, GlobalSearch.find(state.deadlines, state.tasks, query),
-        { query = it }, { searchOpen = false }, { result ->
-            tab = 0
-            taskList = result.kind == "task"
-            birthdayList = result.kind == "birthday"
-            completedTasks = result.completed
-            filter = "All"
-            revealId = if (taskList) "task:${result.id}" else result.id
+    LaunchedEffect(restorePosition) {
+        restorePosition?.let { (index, offset) ->
+            agendaListState.scrollToItem(index, offset)
+            restorePosition = null
+        }
+    }
+    BackHandler(enabled = signedIn && detailReturn != null && !searchOpen && !creating && !taskForm &&
+        state.editing == null && deletingId == null && deletingTaskId == null) {
+        detailReturn?.let { origin ->
+            tab = origin[0].toInt()
+            taskList = origin[1].toBoolean()
+            birthdayList = origin[2].toBoolean()
+            completedTasks = origin[3].toBoolean()
+            filter = origin[4]
+            revealId = null
             revealVersion++
-            searchOpen = false
-            query = ""
-        })
+            restorePosition = origin[5].toInt() to origin[6].toInt()
+            detailReturn = null
+        }
+    }
+    fun revealItem(id: String, kind: String, completed: Boolean = false) {
+        if (detailReturn == null) detailReturn = arrayListOf(tab.toString(), taskList.toString(), birthdayList.toString(),
+            completedTasks.toString(), filter, agendaListState.firstVisibleItemIndex.toString(), agendaListState.firstVisibleItemScrollOffset.toString())
+        tab = 0
+        taskList = kind == "task"
+        birthdayList = kind == "birthday"
+        completedTasks = completed
+        filter = "All"
+        revealId = if (taskList) "task:${id.removePrefix("task:")}" else id
+        revealVersion++
+        searchOpen = false
+        query = ""
+    }
+    if (searchOpen && signedIn) GlobalSearchScreen(query, GlobalSearch.find(state.deadlines, state.tasks, query),
+        { query = it }, { searchOpen = false }, { result -> revealItem(result.id, result.kind, result.completed) })
     val permissionReady = state.notificationsAllowed && state.exactAllowed
     val visible = state.deadlines.filter { event ->
         val next = state.previews[event.id]?.nextStart
@@ -220,15 +246,24 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
                                 at = alarmAt,
                                 zone = ZoneId.systemDefault().id,
                                 now = now, colors = HeroColors, accent = Mint, icon = R.drawable.ic_bell,
-                                modifier = Modifier.weight(1f).fillMaxHeight().testTag("next-alarm-tile"), onClick = { tab = 1 })
+                                modifier = Modifier.weight(1f).fillMaxHeight().testTag("next-alarm-tile"), onClick = {
+                                    val event = next?.first
+                                    if (!permissionReady || testFirst || event == null) tab = 1
+                                    else revealItem(event.id, event.kind)
+                                })
                             else SummaryTile(label = "NEXT EVENT", title = nextEvent?.first?.title ?: "No upcoming events",
                                 at = nextEvent?.second, zone = ZoneId.systemDefault().id,
                                 now = now, colors = listOf(Color(0xFF173A70), Color(0xFF2864AB)), accent = Color(0xFFC7E4FF),
-                                icon = R.drawable.ic_calendar, modifier = Modifier.weight(1f).fillMaxHeight().testTag("next-event-tile"))
+                                icon = R.drawable.ic_calendar, modifier = Modifier.weight(1f).fillMaxHeight().testTag("next-event-tile"),
+                                onClick = nextEvent?.let { item -> { revealItem(item.first.id, item.first.kind) } })
                             } }
                         }
                     }
-                    item { BirthdayTile(nextBirthday, now) { taskList = false; birthdayList = true; filter = "Upcoming"; query = "" } }
+                    item { BirthdayTile(nextBirthday, now) {
+                        val birthday = nextBirthday?.first
+                        if (birthday != null) revealItem(birthday.id, birthday.kind)
+                        else { taskList = false; birthdayList = true; filter = "Upcoming"; query = "" }
+                    } }
                     if (!permissionReady || !state.fullScreenAllowed) item {
                         Surface(onClick = { tab = 1 }, shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.secondaryContainer) {
                             Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -325,9 +360,10 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
     colors: List<Color>, accent: Color, icon: Int, modifier: Modifier = Modifier, dateOnly: Boolean = false, onClick: (() -> Unit)? = null) {
     val content: @Composable () -> Unit = {
         Column(Modifier.fillMaxSize().background(Brush.linearGradient(colors)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Glyph(icon, Modifier.size(16.dp), accent)
-                Text(label, color = accent, style = MaterialTheme.typography.labelSmall)
+                Text(label, color = accent, style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
+                if (onClick != null) Glyph(R.drawable.ic_arrow, Modifier.size(14.dp), accent)
             }
             Text(if (at == null) "—" else if (dateOnly) { if (date(at, zone, "yyyy-MM-dd") == date(now, zone, "yyyy-MM-dd")) "Today" else "Birthday" } else date(at, zone, "HH:mm"), color = Color.White,
                 style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
@@ -361,7 +397,8 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
                 Text(if (days <= 0) "Today" else "In $days ${if (days == 1L) "day" else "days"}", color = Color.White, style = MaterialTheme.typography.labelMedium)
                 val age = com.hackinglab.toki.data.BirthdaySpec.from(next.first).ageOn(next.second)
                 if (age != null) Text("Turns $age", color = accent, style = MaterialTheme.typography.labelSmall)
-            } else Glyph(R.drawable.ic_arrow, tint = accent)
+            }
+            Glyph(R.drawable.ic_arrow, Modifier.size(16.dp), accent)
         }
     }
 }
@@ -429,7 +466,7 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
 
 @Composable private fun EventCard(event: Deadline, preview: EventPreview?, permissionsReady: Boolean, now: Long, dateColor: Color, busy: Boolean, canDelete: Boolean, permissionsLoaded: Boolean, focused: Boolean = false, revealVersion: Int = 0, onEdit: () -> Unit, onDelete: () -> Unit) {
     var expanded by rememberSaveable(event.id) { mutableStateOf(focused) }
-    LaunchedEffect(focused, revealVersion) { if (focused) expanded = true }
+    LaunchedEffect(focused, revealVersion) { if (focused) expanded = true else if (revealVersion > 0) expanded = false }
     val time = preview?.nextStart ?: event.startMillis
     val reminderPassed = preview?.nextStart != null && EventTime.reminderAt(preview.nextStart, event.reminderMinutes) <= now
     val status = when { !event.enabled -> "Off"; preview?.problem != null -> "Needs attention"; preview?.nextStart == null -> "Finished"; reminderPassed -> if (event.kind == "birthday") "Today" else "Due soon"; !permissionsReady -> "Setup needed"; else -> "Alarm on" }

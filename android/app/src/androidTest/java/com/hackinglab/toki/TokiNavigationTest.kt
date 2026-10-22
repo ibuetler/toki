@@ -15,7 +15,7 @@ import java.io.File
 /** Synthetic UI data: never reads sessions, accesses the backend, or schedules alarms. */
 class TokiNavigationTest {
     @get:Rule val screen = createComposeRule()
-    private fun render(dark: Boolean = false, longLists: Boolean = false, reminded: Boolean = false, includePast: Boolean = false, includeBirthday: Boolean = false, birthdaysAvailable: Boolean = true, onCreate: (com.hackinglab.toki.data.NewEvent) -> Unit = {}, onDelete: (String) -> Unit = {}, onEdit: (String) -> Unit = {}, tasks: List<com.hackinglab.toki.data.TokiTask> = emptyList(), onSaveTask: (com.hackinglab.toki.data.TaskDraft, String?) -> Unit = { _, _ -> }, onCompleteTask: (String, Boolean) -> Unit = { _, _ -> }) {
+    private fun render(dark: Boolean = false, permissionsReady: Boolean = true, testAlarm: Boolean = false, birthdayAlarm: Boolean = false, longLists: Boolean = false, reminded: Boolean = false, includePast: Boolean = false, includeBirthday: Boolean = false, birthdaysAvailable: Boolean = true, onCreate: (com.hackinglab.toki.data.NewEvent) -> Unit = {}, onDelete: (String) -> Unit = {}, onEdit: (String) -> Unit = {}, tasks: List<com.hackinglab.toki.data.TokiTask> = emptyList(), onSaveTask: (com.hackinglab.toki.data.TaskDraft, String?) -> Unit = { _, _ -> }, onCompleteTask: (String, Boolean) -> Unit = { _, _ -> }) {
         val start = System.currentTimeMillis() + 3_600_000
         val events = listOf(
             Deadline().apply { id = "one"; title = "Project milestone"; timezone = "Europe/Zurich"; enabled = true; reminderMinutes = if (reminded) 120 else 0; startMillis = start },
@@ -38,8 +38,8 @@ class TokiNavigationTest {
             }
             TOKITheme(darkTheme = dark) {
                 TokiScreen(TokiState(tasks = tasks, tasksAvailable = true, birthdaysAvailable = birthdaysAvailable, deletableIds = setOf("one"), deletePermissionsLoaded = true, ready = true, session = Session("preview", "preview", "hello@example.com"), deadlines = records,
-                    notificationsAllowed = true, exactAllowed = true, fullScreenAllowed = true, scheduled = 1,
-                    previews = records.associate { it.id to if (it.kind == "birthday") EventPreview(System.currentTimeMillis() - 3_600_000, visibleUntil = System.currentTimeMillis() + 3_600_000) else EventPreview(if (it.id == "past") null else it.startMillis, nextReminderStart = if (reminded && it.enabled) it.startMillis + 7 * 86_400_000L else it.startMillis) }),
+                    notificationsAllowed = permissionsReady, exactAllowed = permissionsReady, fullScreenAllowed = true, scheduled = 1, testAt = if (testAlarm) System.currentTimeMillis() + 30_000 else 0,
+                    previews = tasks.mapNotNull { task -> task.reminderMillis.takeIf { it > 0 && !task.completed }?.let { "task:${task.id}" to EventPreview(it, nextReminderStart = it) } }.toMap() + records.associate { it.id to if (it.kind == "birthday") EventPreview(if (birthdayAlarm) System.currentTimeMillis() + 1_800_000 else System.currentTimeMillis() - 3_600_000, nextReminderStart = if (birthdayAlarm) System.currentTimeMillis() + 1_800_000 else null, visibleUntil = System.currentTimeMillis() + 3_600_000) else EventPreview(if (it.id == "past") null else it.startMillis, nextReminderStart = if (reminded && it.enabled) it.startMillis + 7 * 86_400_000L else it.startMillis) }),
                     onSaveTask = onSaveTask, onCompleteTask = onCompleteTask, onEdit = onEdit, onDelete = onDelete, onCreate = onCreate, onLogin = { _, _ -> }, onSync = {}, onLogout = {}, onTest = {}, onNotifications = {}, onExact = {}, onFullScreen = {})
             }
         }
@@ -211,6 +211,103 @@ class TokiNavigationTest {
         screen.onNodeWithTag("next-event-tile").assertIsDisplayed()
         screen.onNodeWithText("+  New event").assertIsDisplayed()
     }
+    @Test fun backFromAlarmEventReturnsToMainPage() {
+        render()
+        screen.onNodeWithTag("next-alarm-tile").performClick()
+        screen.onNodeWithText("Edit event").assertIsDisplayed()
+        androidx.test.espresso.Espresso.pressBack()
+        screen.onNodeWithTag("next-alarm-tile").assertIsDisplayed()
+        screen.onNodeWithTag("next-event-tile").assertIsDisplayed()
+        screen.onNodeWithText("+  New event").assertIsDisplayed()
+        screen.onNodeWithTag("agenda-content").performScrollToNode(hasTestTag("event-one"))
+        screen.onNodeWithText("Edit event").assertDoesNotExist()
+    }
+    @Test fun backFromAlarmTaskRestoresOriginalEventsList() {
+        val task = com.hackinglab.toki.data.TokiTask().apply { id = "alarm-task"; title = "Call Alex"; reminderMillis = System.currentTimeMillis() + 60_000 }
+        render(tasks = listOf(task))
+        screen.onNodeWithTag("next-alarm-tile").performClick()
+        screen.onNodeWithText("Edit task").assertIsDisplayed()
+        androidx.test.espresso.Espresso.pressBack()
+        screen.onNodeWithTag("next-event-tile").assertIsDisplayed()
+        screen.onNodeWithText("+  New event").assertIsDisplayed()
+    }
+    @Test fun backFromBirthdayTileReturnsToMainPage() {
+        render(includeBirthday = true)
+        screen.onNodeWithTag("next-birthday-tile").performClick()
+        screen.onNodeWithText("+  New birthday").assertIsDisplayed()
+        androidx.test.espresso.Espresso.pressBack()
+        screen.onNodeWithTag("next-birthday-tile").assertIsDisplayed()
+        screen.onNodeWithText("+  New event").assertIsDisplayed()
+    }
+    @Test fun backFromDetailsRestoresPreviouslySelectedBirthdaysList() {
+        render(includeBirthday = true)
+        screen.onNodeWithText("Birthdays").performScrollTo().performClick()
+        screen.onNodeWithTag("agenda-content").performScrollToIndex(0)
+        screen.onNodeWithTag("next-event-tile").performClick()
+        screen.onNodeWithText("Edit event").assertIsDisplayed()
+        androidx.test.espresso.Espresso.pressBack()
+        screen.onNodeWithTag("next-event-tile").assertIsDisplayed()
+        screen.onNodeWithText("+  New birthday").assertIsDisplayed()
+    }
+    @Test fun backClosesCreateDialogBeforeReturningFromDetails() {
+        render()
+        screen.onNodeWithTag("next-event-tile").performClick()
+        screen.onNodeWithText("+  New event").performClick()
+        screen.onNodeWithText("New event").assertIsDisplayed()
+        androidx.test.espresso.Espresso.pressBack()
+        screen.onNodeWithText("New event").assertDoesNotExist()
+        screen.onNodeWithText("Edit event").assertIsDisplayed()
+        androidx.test.espresso.Espresso.pressBack()
+        screen.onNodeWithTag("next-event-tile").assertIsDisplayed()
+    }
+    @Test fun summaryEventTileOpensDetailsAndReopensCollapsedItem() {
+        render()
+        screen.onNodeWithTag("next-event-tile").performClick()
+        screen.onNodeWithText("Edit event").assertIsDisplayed()
+        screen.onNodeWithTag("event-one").performClick()
+        screen.onNodeWithText("Edit event").assertDoesNotExist()
+        screen.onNodeWithContentDescription("Back to top").performClick()
+        screen.onNodeWithTag("next-event-tile").performClick()
+        screen.onNodeWithText("Edit event").assertIsDisplayed()
+    }
+    @Test fun summaryAlarmTileOpensItsEvent() {
+        render()
+        screen.onNodeWithTag("next-alarm-tile").performClick()
+        screen.onNodeWithText("Edit event").assertIsDisplayed()
+        screen.onNodeWithText("Alarm rings at the event’s start time.").assertExists()
+    }
+    @Test fun summaryAlarmTileOpensTaskDetails() {
+        val task = com.hackinglab.toki.data.TokiTask().apply { id = "alarm-task"; title = "Call Alex"; notes = "Ask about the workshop"; reminderMillis = System.currentTimeMillis() + 60_000 }
+        render(tasks = listOf(task))
+        screen.onNodeWithTag("next-alarm-tile").performClick()
+        screen.onNodeWithTag("task-alarm-task").assertIsDisplayed()
+        screen.onNodeWithText("Ask about the workshop").assertIsDisplayed()
+        screen.onNodeWithText("Edit task").assertExists()
+        screen.onNodeWithText("+  New task").assertIsDisplayed()
+    }
+    @Test fun summaryBirthdayTileOpensDetails() {
+        render(includeBirthday = true)
+        screen.onNodeWithTag("next-birthday-tile").performClick()
+        screen.onNodeWithText("Turning ${java.time.LocalDate.now().year - 2000}").assertExists()
+        screen.onNodeWithText("The reminder time has passed. This birthday stays here all day.").assertIsDisplayed()
+        screen.onNodeWithText("+  New birthday").assertIsDisplayed()
+    }
+    @Test fun summaryAlarmTileOpensBirthdayDetails() {
+        render(includeBirthday = true, birthdayAlarm = true)
+        screen.onNodeWithTag("next-alarm-tile").performClick()
+        screen.onNodeWithText("Turning ${java.time.LocalDate.now().year - 2000}").assertIsDisplayed()
+        screen.onNodeWithText("+  New birthday").assertIsDisplayed()
+    }
+    @Test fun testAlarmTileKeepsAlarmControls() {
+        render(testAlarm = true)
+        screen.onNodeWithTag("next-alarm-tile").performClick()
+        screen.onNodeWithText("Alarms, on your terms.").assertIsDisplayed()
+    }
+    @Test fun alarmSetupTileKeepsPermissionControls() {
+        render(permissionsReady = false)
+        screen.onNodeWithTag("next-alarm-tile").performClick()
+        screen.onNodeWithText("Alarms, on your terms.").assertIsDisplayed()
+    }
     @Test fun newEventDefaultsAndSubmission() {
         var saved: com.hackinglab.toki.data.NewEvent? = null
         render(onCreate = { saved = it })
@@ -328,7 +425,7 @@ class TokiNavigationTest {
         screen.onNodeWithTag("next-birthday-tile").performClick()
         screen.onNodeWithText("Birthdays").performScrollTo().performClick()
         screen.onNodeWithText("1 birthday").performScrollTo().assertIsDisplayed()
-        screen.onNodeWithTag("event-birthday:fixture").performScrollTo().performClick()
+        screen.onNodeWithTag("event-birthday:fixture").performScrollTo()
         screen.onNodeWithText("The reminder time has passed. This birthday stays here all day.").performScrollTo().assertIsDisplayed()
         screen.onNodeWithText("Events").performScrollTo().performClick()
         screen.onNodeWithTag("event-birthday:fixture").assertDoesNotExist()

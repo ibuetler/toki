@@ -1,6 +1,6 @@
 # TOKI Android user guide
 
-TOKI keeps dated events, yearly birthdays and quick tasks in separate lists. This guide shows the Android app as of 21 October 2026. The screenshots were captured from the real Compose screens on an Android phone with fictional sample data; no personal records or credentials are pictured.
+TOKI keeps dated events, yearly birthdays and quick tasks in separate lists. This guide describes the Android app as of 22 October 2026. The screenshots were captured on 21 October 2026 from the real Compose screens on an Android phone with fictional sample data; no personal records or credentials are pictured.
 
 For building, installation, recurrence details and troubleshooting, see the [Android technical guide](../android/README.md). The [iOS app](../ios/README.md) is currently an alarm prototype and does not yet provide these screens.
 
@@ -8,7 +8,7 @@ For building, installation, recurrence details and troubleshooting, see the [And
 
 <img src="screenshots/android/agenda.png" alt="TOKI Agenda with next alarm, next event and next birthday tiles" width="300">
 
-The green **Next alarm** and blue **Next event** tiles put the earlier time on the left. The purple **Next birthday** tile shows the next birthday and upcoming age when the birth year is known. Tap it to open Birthdays. Times use the phone's current time zone.
+The green **Next alarm** and blue **Next event** tiles put the earlier time on the left. The purple **Next birthday** tile shows the next birthday and upcoming age when the birth year is known. Tap a populated summary tile to jump to its list, scroll to that exact item and expand its details. Next alarm can open an event, birthday or task; Next event opens the event; Next birthday opens the birthday. Use the Android Back gesture or button to close those details and return to the list and position you came from. If a form or dialog is open, Back dismisses that first. Test-alarm, setup and empty-alarm tiles open alarm controls. An empty birthday tile opens the Birthdays list; an empty event tile has no detail action. Times use the phone's current time zone.
 
 An event stays visible until its deadline, even after its reminder rings. A birthday stays visible all day. Tasks stay active until you complete them.
 
