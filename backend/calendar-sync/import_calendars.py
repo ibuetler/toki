@@ -9,6 +9,8 @@ import datetime as dt
 import fcntl
 import hashlib
 import json
+import ipaddress
+import socket
 import os
 from pathlib import Path
 import stat
@@ -92,7 +94,7 @@ def parse_feed(data, source, zone, start, end, limit=20000):
     return result
 
 
-def merge_feeds(feeds):
+def merge_entries(feeds):
     """A newer cancellation wins over a stale copy in a different calendar."""
     result = {}
     for feed in feeds:
@@ -105,7 +107,11 @@ def merge_feeds(feeds):
             result[key]['sources'] = sources
     for entry in result.values():
         entry['payload'] = dict(entry['payload'], source_names=' · '.join(sorted(entry['sources'])))
-    return {key: entry['payload'] for key, entry in result.items() if not entry['cancelled']}
+    return {key: entry for key, entry in result.items() if not entry['cancelled']}
+
+
+def merge_feeds(feeds):
+    return {key: entry['payload'] for key, entry in merge_entries(feeds).items()}
 
 
 def exclude_titles(events, titles):
@@ -115,7 +121,36 @@ def exclude_titles(events, titles):
             if event['title'].strip().casefold() not in excluded}
 
 
-def fetch_feed(url):
+def title_matches(title, pattern, match_type='wildcard'):
+    title, pattern = title.strip().lower(), pattern.strip().lower()
+    if not pattern or len(pattern) > 200:
+        return False
+    if match_type == 'exact':
+        return title == pattern
+    if match_type != 'wildcard':
+        raise ValueError('Unknown exclusion type')
+    previous = [True] + [False] * len(title)
+    for token in pattern:
+        current = [previous[0] and token == '*'] + [False] * len(title)
+        for index, char in enumerate(title, 1):
+            current[index] = (previous[index] or current[index-1]) if token == '*' else previous[index-1] and (token == '?' or token == char)
+        previous = current
+    return previous[-1]
+
+
+def validate_feed_url(url, allowed_hosts):
+    parsed = urlsplit(url)
+    if (parsed.scheme != 'https' or parsed.hostname not in allowed_hosts or parsed.port not in (None, 443)
+            or parsed.username or parsed.password or parsed.fragment):
+        raise ValueError('Calendar host is not approved')
+    addresses = socket.getaddrinfo(parsed.hostname, 443, type=socket.SOCK_STREAM)
+    if not addresses or any(not ipaddress.ip_address(item[4][0]).is_global for item in addresses):
+        raise ValueError('Calendar host must resolve to public addresses')
+
+
+def fetch_feed(url, allowed_hosts=None):
+    if allowed_hosts is not None:
+        validate_feed_url(url, allowed_hosts)
     parsed = urlsplit(url)
     if parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password:
         raise ValueError('Calendar feeds require HTTPS')
@@ -149,6 +184,14 @@ class PocketBase:
             # PocketBase validation bodies can contain event content; never log them.
             raise RuntimeError('PocketBase request failed (HTTP %s)' % response.status_code)
         return response.json() if response.content else None
+
+    def all_records(self, collection):
+        result, page = [], 1
+        while True:
+            response = self.request('GET', '/api/collections/' + collection + '/records', params={'page':page,'perPage':500})
+            result.extend(response['items'])
+            if page >= response['totalPages']: return result
+            page += 1
 
     def resolve_user(self, email):
         email = email.strip().casefold()
@@ -228,7 +271,7 @@ def routed_snapshot(snapshots, routes, titles):
     return {owner: exclude_titles(merge_feeds(feeds), titles) for owner, feeds in grouped.items()}
 
 
-def reconcile_users(api, desired, apply=False):
+def reconcile_users(api, desired, apply=False, protected_owners=()):
     # One importer configuration owns this dedicated collection. Include former
     # recipients so moving/removing a user's last source removes their old copies.
     existing = api.records()
@@ -239,10 +282,58 @@ def reconcile_users(api, desired, apply=False):
         for key, value in result.items():
             counts[key] += value
     for row in existing:
-        if row['external_key'] not in desired.get(row['owner'], {}):
+        if row['owner'] not in protected_owners and row['external_key'] not in desired.get(row['owner'], {}):
             counts['deleted'] += 1
             if apply:
                 api.request('DELETE', '/api/collections/calendar_events/records/' + row['id'])
+    return counts
+
+
+def apply_rules(merged, rules, sources):
+    names = {s['id']: s['name'] for s in sources}
+    result = {}
+    for key, entry in merged.items():
+        excluded = any(rule['enabled'] and
+                       (not rule.get('source') or names.get(rule['source']) in entry['sources']) and
+                       title_matches(entry['payload']['title'], rule['pattern'], rule.get('match_type', 'wildcard'))
+                       for rule in rules)
+        if not excluded:
+            result[key] = entry['payload']
+    return result
+
+
+def database_sync(api, config, zone, start, end, limit, apply):
+    sources = api.all_records('calendar_sources')
+    rules = api.all_records('calendar_exclusions')
+    owners = {s['owner'] for s in sources}
+    desired, protected, statuses = {}, set(), []
+    allowed = set(config.get('sync', 'allowed_hosts', fallback='outlook.office365.com').split())
+    for owner in owners:
+        active = [s for s in sources if s['owner'] == owner and s['enabled']]
+        snapshots = []
+        for source in active:
+            try:
+                snapshot = parse_feed(fetch_feed(source['url'], allowed), source['name'], zone, start, end, limit)
+                snapshots.append(snapshot)
+                statuses.append((source, True))
+            except Exception:
+                protected.add(owner)
+                statuses.append((source, False))
+        if owner not in protected:
+            # Preserve source sets through the merge for scoped rules.
+            merged = merge_entries(snapshots)
+            desired[owner] = apply_rules(merged, [r for r in rules if r['owner']==owner], active)
+    if sum(map(len, desired.values())) > limit:
+        raise ValueError('Combined occurrence limit exceeded')
+    counts = reconcile_users(api, desired, apply, protected)
+    if apply:
+        now = stamp(dt.datetime.now(UTC), zone)
+        for source, success in statuses:
+            message = '' if success and source['owner'] not in protected else ('Another calendar for this account failed; existing imports preserved.' if success else 'Calendar could not be fetched or parsed. Check the published HTTPS URL and approved host.')
+            payload = {'last_error':message}
+            if success and source['owner'] not in protected: payload['last_success']=now
+            api.request('PATCH', '/api/collections/calendar_sources/records/'+source['id'], payload)
+    print(('Applied: ' if apply else 'Dry run: ') + json.dumps(counts,sort_keys=True) + '; accounts preserved after feed errors: %s' % len(protected))
     return counts
 
 
@@ -260,6 +351,8 @@ def run(config_path, apply=False):
     if not (0 <= past <= 3660 and 1 <= future <= 3660 and 1 <= limit <= 100000):
         raise ValueError('Invalid import horizon or occurrence limit')
     start, end = now - dt.timedelta(days=past), now + dt.timedelta(days=future)
+    if config.get('sync', 'settings_source', fallback='config') == 'pocketbase':
+        return database_sync(PocketBase(config['pocketbase']), config, zone, start, end, limit, apply)
     sections = [s for s in config.sections() if s.startswith('calendar:')]
     if not sections:
         raise ValueError('No calendar sources configured')

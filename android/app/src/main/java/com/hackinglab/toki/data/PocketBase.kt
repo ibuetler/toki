@@ -136,6 +136,25 @@ class PocketBase(internal val connect: (String) -> HttpURLConnection = { URI(BAS
     fun completeTask(session: Session, id: String, completed: Boolean): TokiTask =
         task(request(taskPath(id), session.token, JSONObject().put("completed", completed), "PATCH"))
     fun deleteTask(session: Session, id: String) { request(taskPath(id), session.token, method = "DELETE") }
+    fun calendarSettings(session: Session): CalendarSettings = CalendarSettings(
+        all("calendar_sources", session.token).map { CalendarSource(it.getString("id"), it.getString("name"), it.getString("url"), it.getBoolean("enabled"), it.optString("last_success"), it.optString("last_error")) },
+        all("calendar_exclusions", session.token).map { CalendarRule(it.getString("id"), it.getString("pattern"), it.optString("source"), it.getBoolean("enabled"), it.getString("match_type")) })
+    fun saveCalendarSource(session: Session, source: CalendarSource) {
+        source.validate()
+        val body = JSONObject().put("name", source.name.trim()).put("url", source.url.trim()).put("enabled", source.enabled)
+        if (source.id.isBlank()) body.put("owner", session.userId)
+        request("/api/collections/calendar_sources/records" + if (source.id.isBlank()) "" else "/${source.id}", session.token, body, if (source.id.isBlank()) "POST" else "PATCH")
+    }
+    fun saveCalendarRule(session: Session, rule: CalendarRule) {
+        rule.validate()
+        val body = JSONObject().put("pattern", rule.pattern.trim()).put("source", rule.source).put("enabled", rule.enabled).put("match_type", rule.matchType)
+        if (rule.id.isBlank()) body.put("owner", session.userId)
+        request("/api/collections/calendar_exclusions/records" + if (rule.id.isBlank()) "" else "/${rule.id}", session.token, body, if (rule.id.isBlank()) "POST" else "PATCH")
+    }
+    fun deleteCalendarSetting(session: Session, id: String, source: Boolean) {
+        require(id.matches(Regex("[a-z0-9]{15}")))
+        request("/api/collections/${if (source) "calendar_sources" else "calendar_exclusions"}/records/$id", session.token, method = "DELETE")
+    }
     fun setCalendarHidden(session: Session, externalKey: String, hidden: Boolean) {
         require(externalKey.matches(Regex("[a-f0-9]{64}")))
         fun preference() = all("calendar_preferences", session.token).firstOrNull { it.getString("external_key") == externalKey }

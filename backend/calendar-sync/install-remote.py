@@ -54,6 +54,8 @@ config.remove_option('pocketbase', 'owner')
 if config_file.exists():
     previous = configparser.ConfigParser(interpolation=None)
     previous.read(config_file)
+    if previous.get('sync', 'settings_source', fallback='config') == 'pocketbase':
+        config['sync']['settings_source'] = 'pocketbase'
     # Keep remotely maintained exclusions unless supplied explicitly in the bundle.
     if previous.has_section('exclude') and not config.has_section('exclude'):
         config['exclude'] = dict(previous['exclude'])

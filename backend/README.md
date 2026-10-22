@@ -60,7 +60,7 @@ Private tasks are a separate collection with four priorities, optional one-off r
 
 Personal hide preferences are stored separately in `calendar_preferences`, keyed by owner and stable occurrence identity, and are not changed by the importer.
 
-The private, client-read-only `calendar_events` collection stores expanded ICS occurrences separately from manually created deadlines. The importer runs every four hours by default. Each calendar section uses `user = TOKI_SIGN_IN_EMAIL` to select the existing recipient account; shared meetings are deduplicated within each account. It supports a private, case-insensitive exact-title exclusion list applied after deduplication; excluded imports are removed on the next successful run. See the [calendar importer](calendar-sync/README.md) for configuration, exclusions, scheduling and recovery.
+The private, client-read-only `calendar_events` collection stores expanded ICS occurrences separately from manually created deadlines. The importer runs every four hours by default. Owner-private `calendar_sources` and `calendar_exclusions` store app-managed URLs and title patterns; shared meetings are deduplicated within each account. It supports private, case-insensitive wildcard or exact-title exclusions applied after deduplication; excluded imports are removed on the next successful run. See the [calendar importer](calendar-sync/README.md) for configuration, exclusions, scheduling and recovery.
 
 Run an import immediately from macOS:
 

@@ -90,13 +90,29 @@ Alarms use the phone's alarm volume, loop until dismissed, and stop after two mi
 
 ## Outlook calendar events
 
-Imported meetings appear in **Events**, with their source calendar names. A meeting shared across calendars appears once when its calendar identifiers match, with all matching sources listed. Imported items are read-only: make changes in Outlook. A server-side exclusion list can hide selected event titles across all imported calendars. It matches complete titles without regard to case; manually created TOKI events are unaffected. After the next successful import, sync TOKI to remove excluded entries and their alarms. Removing an exclusion allows matching items to return. See [how to maintain exclusions](../backend/calendar-sync/README.md#exclude-unwanted-events). Timed meetings ring five minutes before; all-day calendar entries have no alarm.
+Imported meetings appear in **Events**, with their source calendar names. A meeting shared across calendars appears once when its calendar identifiers match, with all matching sources listed. Imported items are read-only: make changes in Outlook. Your private exclusion rules can hide matching event titles across all your imported calendars or one selected source; manually created TOKI events are unaffected. After the next successful import, sync TOKI to remove excluded entries and their alarms. Removing an exclusion allows matching items to return. Manage them in **Account → Calendars & exclusions**, or read the [calendar integration guide](../backend/calendar-sync/README.md#title-exclusions-and-wildcard-patterns). Timed meetings ring five minutes before; all-day calendar entries have no alarm.
 
 Jupiter checks the feeds every four hours by default. After that import, open TOKI or press refresh to update the list and alarms on your phone. Outlook publication may introduce additional delay. See the [calendar integration guide](../backend/calendar-sync/README.md).
 
+### Connect calendars and exclude titles
+
+Open **Account → Calendars & exclusions**. Add a calendar name and its published HTTPS ICS URL; it belongs automatically to your signed-in TOKI account. Edit, disable or remove connections there, and check their last import/error status. Links are masked in the form and never displayed in the connection list. Outlook publishing links are supported by default; other providers need administrator approval.
+
+Tap **Add exclusion**, enter a title pattern and choose all your calendars or one source:
+
+| Pattern | Excludes |
+| --- | --- |
+| `Marina *` | Titles starting with “Marina ” |
+| `*Vacation*` | Titles containing “Vacation” |
+| `Team ?` | Titles such as “Team A” |
+
+Matching ignores case and covers the whole title. `*` means any number of characters; `?` means one. Other regex punctuation is literal. Turn off **Use * and ? wildcards** for a completely literal title match. The preview counts currently cached imported occurrences, including hidden ones; items already excluded or not imported yet cannot be counted. Rules can be edited, disabled or deleted.
+
+Saving settings needs a connection. Rules and connection changes apply during the next successful server import, normally every four hours; open TOKI or press Sync afterward to update phone events and alarms. **Reload settings** refreshes settings/status, not the feeds themselves. Deleting a connection removes imports supplied only by it after the next successful import. Removing a rule can let events return, while personal hides remain in place. Outlook and other users are unaffected.
+
 ### Hide an imported occurrence
 
-Expand an imported event and tap **Hide in TOKI**. It disappears from the normal event list, search and summary tiles, and its future alarm is cancelled on this phone. Outlook and other users' calendars are unchanged. Hiding requires an internet connection; the preference is applied locally after PocketBase confirms it.
+Expand an imported event and tap the prominent **Hide in TOKI** button directly below its title. It disappears from the normal event list, search and summary tiles, and its future alarm is cancelled on this phone. Outlook and other users' calendars are unchanged. Hiding requires an internet connection; the preference is applied locally after PocketBase confirms it.
 
 To undo it, open **Events**, swipe the horizontal filter row to **Hidden events**, and select it. Expand the occurrence and tap **Restore event**. It returns to the normal list, and a future five-minute reminder can be scheduled again. A reminder time that has already passed is not replayed.
 

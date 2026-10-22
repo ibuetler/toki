@@ -4,6 +4,9 @@ email = importer-superuser@example.invalid
 password = REPLACE_LOCALLY
 
 [sync]
+# User connections and exclusion patterns are managed through Android/PocketBase.
+settings_source = pocketbase
+allowed_hosts = outlook.office365.com
 # A bounded horizon keeps yearly/unbounded recurring calendars finite.
 past_days = 7
 future_days = 366
@@ -11,23 +14,5 @@ future_days = 366
 timezone = Europe/Zurich
 max_occurrences = 20000
 
-[calendar:compass]
-name = Compass Security
-url = https://example.invalid/compass.ics
-user = ivan.buetler@compass-security.com
-
-[calendar:hackinglab]
-name = Hacking-Lab
-url = https://example.invalid/hackinglab.ics
-user = ivan.buetler@compass-security.com
-
-[calendar:ost]
-name = OST
-url = https://example.invalid/ost.ics
-user = ivan.buetler@compass-security.com
-
-[exclude]
-# One exact event title per line; case-insensitive, across all calendars.
-# Leave empty to import every title. Exclusions also remove existing imports.
-titles =
-    Marina in CH
+# Legacy [calendar:...] / [exclude] sections are read only when settings_source=config.
+# New installations add URLs and patterns in Android: Account > Calendars & exclusions.

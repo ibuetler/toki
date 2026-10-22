@@ -24,6 +24,27 @@ class BackendTests(unittest.TestCase):
             owner, token = accounts[0]
             other, outsider = accounts[1]
             self.assertEqual(owner, api.resolve_user(api.request('GET', '/api/collections/users/records/' + owner)['email']))
+            # Calendar connections, private URLs and exclusion scopes are owner-only.
+            def setting(method, collection, auth, rid='', payload=None):
+                endpoint = os.environ['TOKI_TEST_URL'] + '/api/collections/' + collection + '/records'
+                return requests.request(method, endpoint + ('/' + rid if rid else ''), headers={'Authorization': auth} if auth else {}, json=payload, timeout=15)
+            connection = setting('POST','calendar_sources',token,payload={'owner':owner,'name':'Test source','url':'https://outlook.office365.com/test.ics','enabled':True})
+            self.assertEqual(200,connection.status_code)
+            source_id=connection.json()['id']
+            for auth in (outsider,None):
+                self.assertEqual(404,setting('GET','calendar_sources',auth,source_id).status_code)
+                self.assertEqual([],setting('GET','calendar_sources',auth).json()['items'])
+                self.assertIn(setting('PATCH','calendar_sources',auth,source_id,{'url':'https://outlook.office365.com/attack.ics'}).status_code,(400,403,404))
+            self.assertIn(setting('PATCH','calendar_sources',token,source_id,{'owner':other}).status_code,(400,403,404))
+            self.assertIn(setting('PATCH','calendar_sources',token,source_id,{'last_success':'2026-10-22 10:00:00.000Z'}).status_code,(400,403,404))
+            self.assertIn(setting('POST','calendar_exclusions',outsider,payload={'owner':other,'pattern':'Marina *','match_type':'wildcard','source':source_id,'enabled':True}).status_code,(400,403,404))
+            rule=setting('POST','calendar_exclusions',token,payload={'owner':owner,'pattern':'Marina *','match_type':'wildcard','source':source_id,'enabled':True})
+            self.assertEqual(200,rule.status_code)
+            rule_id=rule.json()['id']
+            self.assertEqual(404,setting('GET','calendar_exclusions',outsider,rule_id).status_code)
+            self.assertEqual(200,setting('PATCH','calendar_exclusions',token,rule_id,{'pattern':'*Vacation*','enabled':False}).status_code)
+            self.assertEqual(204,setting('DELETE','calendar_sources',token,source_id).status_code)
+            self.assertEqual(404,setting('GET','calendar_exclusions',token,rule_id).status_code)
             desired = merge_feeds([parse(feed(BASE)), parse(feed(BASE), 'B')])
             self.assertEqual(1, reconcile(api, owner, desired, True)['created'])
             self.assertEqual(1, reconcile(api, owner, desired, True)['unchanged'])

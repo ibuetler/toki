@@ -49,7 +49,9 @@ private fun Glyph(@DrawableRes resource: Int, modifier: Modifier = Modifier, tin
 @Composable
 internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onSync: () -> Unit,
     onLogout: () -> Unit, onTest: () -> Unit, onNotifications: () -> Unit,
-    onExact: () -> Unit, onFullScreen: () -> Unit, onCreate: (com.hackinglab.toki.data.NewEvent) -> Unit = {}, onDelete: (String) -> Unit = {}, onEdit: (String) -> Unit = {}, onCloseEdit: () -> Unit = {}, onUpdate: (com.hackinglab.toki.data.NewEvent) -> Unit = {}, onSaveTask: (TaskDraft, String?) -> Unit = { _, _ -> }, onCompleteTask: (String, Boolean) -> Unit = { _, _ -> }, onDeleteTask: (String) -> Unit = {}, onClearTaskError: () -> Unit = {}, onHideCalendar: (String, Boolean) -> Unit = { _, _ -> }) {
+    onExact: () -> Unit, onFullScreen: () -> Unit, onCreate: (com.hackinglab.toki.data.NewEvent) -> Unit = {}, onDelete: (String) -> Unit = {}, onEdit: (String) -> Unit = {}, onCloseEdit: () -> Unit = {}, onUpdate: (com.hackinglab.toki.data.NewEvent) -> Unit = {}, onSaveTask: (TaskDraft, String?) -> Unit = { _, _ -> }, onCompleteTask: (String, Boolean) -> Unit = { _, _ -> }, onDeleteTask: (String) -> Unit = {}, onClearTaskError: () -> Unit = {}, onHideCalendar: (String, Boolean) -> Unit = { _, _ -> }, onLoadCalendars: () -> Unit = {}, onSaveCalendar: (CalendarSource) -> Unit = {}, onSaveRule: (CalendarRule) -> Unit = {}, onDeleteSetting: (String, Boolean) -> Unit = { _, _ -> }) {
+    var calendarSettingsOpen by rememberSaveable { mutableStateOf(false) }
+    if (calendarSettingsOpen && state.session != null) CalendarSettingsScreen(state, { calendarSettingsOpen = false }, onLoadCalendars, onSaveCalendar, onSaveRule, onDeleteSetting)
     var deletingId by rememberSaveable { mutableStateOf<String?>(null) }
     state.deadlines.find { it.id == deletingId }?.let { event ->
         AlertDialog(onDismissRequest = { deletingId = null },
@@ -362,6 +364,7 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
                             HorizontalDivider()
                             Text("${state.deadlines.count { it.groupName.isBlank() }} private events · ${state.deadlines.count { it.groupName.isNotBlank() }} shared events")
                             Button(onClick = onSync, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text("Sync now") }
+                            OutlinedButton(onClick = { calendarSettingsOpen = true; onLoadCalendars() }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text("Calendars & exclusions") }
                             OutlinedButton(onClick = onLogout, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text("Sign out") }
                         }
                     } }
@@ -519,6 +522,11 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
             if (expanded) {
                 HorizontalDivider()
                 Text(event.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                if (event.kind == "calendar") {
+                    if (canHide && event.externalKey.isNotBlank()) FilledTonalButton(onClick = onHide, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (event.hidden) "Restore event" else "Hide in TOKI")
+                    } else Text("Sync after backend setup to enable hiding.", style = MaterialTheme.typography.bodySmall)
+                }
                 if (event.kind == "birthday") {
                     val birthday = com.hackinglab.toki.data.BirthdaySpec.from(event)
                     val age = birthday.ageOn(time)
@@ -543,11 +551,6 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
                 if (event.description.isNotBlank()) Text(event.description, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (event.rrule.isNotBlank()) Text("Repeat rule: ${event.rrule}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (event.kind == "calendar") Text("Imported calendar event. Edit or delete it in Outlook, then sync TOKI after the next calendar import.", style = MaterialTheme.typography.bodySmall)
-                if (event.kind == "calendar") {
-                    if (canHide && event.externalKey.isNotBlank()) TextButton(onClick = onHide, enabled = !busy) {
-                        Text(if (event.hidden) "Restore event" else "Hide in TOKI")
-                    } else Text("Sync after backend setup to enable hiding.", style = MaterialTheme.typography.bodySmall)
-                }
                 if (canDelete) Row {
                     TextButton(onClick = onEdit, enabled = !busy) { Text("Edit event") }
                     TextButton(onClick = onDelete, enabled = !busy) { Text("Delete event", color = MaterialTheme.colorScheme.error) }

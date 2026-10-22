@@ -13,7 +13,7 @@ import kotlinx.coroutines.withContext
 
 data class EventPreview(val nextStart: Long? = null, val problem: String? = null, val nextReminderStart: Long? = null, val visibleUntil: Long? = null)
 
-data class TokiState(val calendarHidingAvailable: Boolean = false, val tasks: List<TokiTask> = emptyList(), val tasksAvailable: Boolean = false, val taskError: String? = null, val taskSavedVersion: Int = 0, val editing: EditableEvent? = null, val editError: String? = null, val birthdaysAvailable: Boolean = false, val deletableIds: Set<String> = emptySet(), val deletePermissionsLoaded: Boolean = false, val createError: String? = null, val createdVersion: Int = 0, val ready: Boolean = false, val session: Session? = null,
+data class TokiState(val calendarSettings: CalendarSettings? = null, val settingsBusy: Boolean = false, val settingsError: String? = null, val settingsSavedVersion: Int = 0, val calendarHidingAvailable: Boolean = false, val tasks: List<TokiTask> = emptyList(), val tasksAvailable: Boolean = false, val taskError: String? = null, val taskSavedVersion: Int = 0, val editing: EditableEvent? = null, val editError: String? = null, val birthdaysAvailable: Boolean = false, val deletableIds: Set<String> = emptySet(), val deletePermissionsLoaded: Boolean = false, val createError: String? = null, val createdVersion: Int = 0, val ready: Boolean = false, val session: Session? = null,
     val deadlines: List<Deadline> = emptyList(), val busy: Boolean = false,
     val message: String? = null, val lastSync: Long = 0, val scheduled: Int = 0,
     val exactAllowed: Boolean = false, val notificationsAllowed: Boolean = false, val fullScreenAllowed: Boolean = false, val testAt: Long = 0, val testDelay: Long = -1, val previews: Map<String, EventPreview> = emptyMap())
@@ -52,7 +52,9 @@ class TokiViewModel(application: Application) : AndroidViewModel(application) {
         val records = graph.database.deadlines().all()
         val tasks = graph.database.tasks().all()
         val previews = eventPreviews(records + tasks.mapNotNull { it.alarm() }, System.currentTimeMillis())
-        mutable.value = mutable.value.copy(calendarHidingAvailable = graph.prefs.getBoolean("calendarHidingAvailable", false), tasks = tasks, tasksAvailable = graph.prefs.getBoolean("tasksAvailable", false), birthdaysAvailable = graph.prefs.getBoolean("birthdaysAvailable", false), deletableIds = graph.prefs.getStringSet("deletableIds", emptySet()).orEmpty().toSet(), deletePermissionsLoaded = graph.prefs.contains("deletableIds"), ready = true, session = graph.sessions.load(),
+        val session = graph.sessions.load()
+        val sameAccount = session != null && mutable.value.session?.userId == session.userId
+        mutable.value = mutable.value.copy(calendarSettings = mutable.value.calendarSettings.takeIf { sameAccount }, settingsError = mutable.value.settingsError.takeIf { sameAccount }, calendarHidingAvailable = graph.prefs.getBoolean("calendarHidingAvailable", false), tasks = tasks, tasksAvailable = graph.prefs.getBoolean("tasksAvailable", false), birthdaysAvailable = graph.prefs.getBoolean("birthdaysAvailable", false), deletableIds = graph.prefs.getStringSet("deletableIds", emptySet()).orEmpty().toSet(), deletePermissionsLoaded = graph.prefs.contains("deletableIds"), ready = true, session = graph.sessions.load(),
             deadlines = records, previews = previews, lastSync = graph.prefs.getLong("lastSync", 0),
             scheduled = count, testAt = graph.reminders.pendingTestAt(), testDelay = graph.reminders.lastTestDelay(), fullScreenAllowed = graph.reminders.fullScreenAllowed(), exactAllowed = graph.reminders.exactAllowed(), notificationsAllowed = graph.reminders.notificationsAllowed())
     }
@@ -71,6 +73,38 @@ class TokiViewModel(application: Application) : AndroidViewModel(application) {
             } finally { mutable.value = mutable.value.copy(busy = false) }
         }
     }
+    private fun calendarSettingsAction(write: Boolean = false, work: (Session) -> Unit = {}) {
+        if (mutable.value.settingsBusy || mutable.value.busy) return
+        mutable.value = mutable.value.copy(settingsBusy = true, settingsError = null)
+        viewModelScope.launch {
+            var saved = false
+            try {
+                withContext(Dispatchers.IO) {
+                    val session = graph.api.refresh(requireNotNull(graph.sessions.load()))
+                    check(graph.sessions.load()?.userId == session.userId)
+                    graph.sessions.save(session)
+                    work(session)
+                    saved = write
+                    if (write) mutable.value = mutable.value.copy(settingsSavedVersion = mutable.value.settingsSavedVersion + 1)
+                    val settings = graph.api.calendarSettings(session)
+                    check(graph.sessions.load()?.userId == session.userId)
+                    mutable.value = mutable.value.copy(calendarSettings = settings)
+                }
+            } catch (error: Exception) {
+                mutable.value = mutable.value.copy(settingsError = when {
+                    saved -> "Saved. Reload settings to see the latest changes."
+                    error is IllegalArgumentException -> error.message
+                    error is ApiFailure && error.status == 404 -> "Calendar settings are unavailable. Sync after backend setup."
+                    error is ApiFailure && error.status == 401 -> "Session expired. Close settings and sign in again."
+                    else -> "Could not confirm the change. Reload settings before retrying."
+                })
+            } finally { mutable.value = mutable.value.copy(settingsBusy = false) }
+        }
+    }
+    fun loadCalendarSettings() = calendarSettingsAction()
+    fun saveCalendarSource(source: CalendarSource) = calendarSettingsAction(true) { graph.api.saveCalendarSource(it, source) }
+    fun saveCalendarRule(rule: CalendarRule) = calendarSettingsAction(true) { graph.api.saveCalendarRule(it, rule) }
+    fun deleteCalendarSetting(id: String, source: Boolean) = calendarSettingsAction(true) { graph.api.deleteCalendarSetting(it, id, source) }
     fun hideCalendarEvent(id: String, hidden: Boolean) {
         val event = mutable.value.deadlines.find { it.id == id && it.kind == "calendar" } ?: return
         if (!mutable.value.calendarHidingAvailable) return
@@ -249,7 +283,7 @@ class TokiViewModel(application: Application) : AndroidViewModel(application) {
         reload()
     }
     fun sync() = action { graph.sessions.load()?.let { graph.sync(it) }; reload() }
-    fun logout() = action { graph.logout(); mutable.value = mutable.value.copy(editing = null, editError = null); reload() }
+    fun logout() = action { graph.logout(); mutable.value = mutable.value.copy(editing = null, editError = null, calendarSettings = null, settingsError = null); reload() }
     fun permissionsChanged() = action { reload() }
     fun testReminder() = action {
         val at = graph.reminders.test()

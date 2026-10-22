@@ -15,13 +15,14 @@ import time
 
 container, app_name, work_name, mode = sys.argv[1:5]
 collection = sys.argv[5] if len(sys.argv) > 5 else 'birthdays'
-if collection not in {'birthdays', 'tasks', 'calendar_events', 'calendar_preferences'}: raise RuntimeError('Unreviewed migration')
-MIGRATION = {'birthdays': '1792540800_birthdays.js', 'tasks': '1792627200_tasks.js', 'calendar_events': '1792713600_calendar_events.js', 'calendar_preferences': '1792713601_calendar_preferences.js'}[collection]
+if collection not in {'birthdays', 'tasks', 'calendar_events', 'calendar_preferences', 'calendar_settings'}: raise RuntimeError('Unreviewed migration')
+MIGRATION = {'birthdays': '1792540800_birthdays.js', 'tasks': '1792627200_tasks.js', 'calendar_events': '1792713600_calendar_events.js', 'calendar_preferences': '1792713601_calendar_preferences.js', 'calendar_settings': '1792713602_calendar_settings.js'}[collection]
 required_fields = ({'owner', 'name', 'month', 'day', 'birth_year', 'reminder_hour', 'reminder_minute', 'leap_day_policy', 'enabled'} if collection == 'birthdays' else {'owner', 'title', 'notes', 'priority', 'completed', 'remind_at'})
 if collection == 'calendar_events':
     required_fields = {'owner', 'external_key', 'title', 'description', 'location', 'source_names', 'start_at', 'end_at', 'timezone', 'all_day', 'enabled', 'reminder_minutes'}
 if collection == 'calendar_preferences':
     required_fields = {'owner', 'external_key', 'hidden'}
+new_collections = ({'calendar_sources': {'owner','name','url','enabled','last_success','last_error'}, 'calendar_exclusions': {'owner','pattern','source','enabled','match_type'}} if collection == 'calendar_settings' else {collection: required_fields})
 app, work = Path(app_name), Path(work_name)
 apply = mode == 'apply'
 
@@ -61,19 +62,20 @@ def verify(before_file, after_file):
                 return collections.Counter(hashlib.sha256(repr(row).encode()).digest() for row in db.execute(sql))
             old, new = hashes(before), hashes(after)
             if table in {'_collections', '_migrations'}:
-                if old - new or sum(new.values()) != sum(old.values()) + 1:
+                if old - new or sum(new.values()) != sum(old.values()) + (len(new_collections) if table == '_collections' else 1):
                     raise RuntimeError('Unexpected schema/history changes: ' + table)
             elif old != new: raise RuntimeError('Existing table changed: ' + table)
-        row = after.execute("SELECT listRule,viewRule,createRule,updateRule,deleteRule FROM _collections WHERE name=?", (collection,)).fetchone()
-        if not row or (collection != 'calendar_events' and not all(row)): raise RuntimeError(collection + ' rules missing')
-        if collection == 'calendar_events' and (not all(row[:2]) or any(rule is not None for rule in row[2:])):
-            raise RuntimeError('Imported calendars must be owner-readable and client-write-locked')
-        for rule in (row[:2] if collection == 'calendar_events' else row):
-            if 'owner = @request.auth.id' not in rule: raise RuntimeError(collection + ' owner isolation missing')
-        fields = {r[1] for r in after.execute('PRAGMA table_info(' + quote(collection) + ')')}
-        if not required_fields <= fields:
-            raise RuntimeError(collection + ' fields missing')
-        if after.execute('SELECT count(*) FROM ' + quote(collection)).fetchone()[0] != 0: raise RuntimeError('New ' + collection + ' collection is not empty')
+        for added, required in new_collections.items():
+            row = after.execute("SELECT listRule,viewRule,createRule,updateRule,deleteRule FROM _collections WHERE name=?", (added,)).fetchone()
+            if not row or (added != 'calendar_events' and not all(row)): raise RuntimeError(collection + ' rules missing')
+            if added == 'calendar_events' and (not all(row[:2]) or any(rule is not None for rule in row[2:])):
+                raise RuntimeError('Imported calendars must be owner-readable and client-write-locked')
+            for rule in (row[:2] if added == 'calendar_events' else row):
+                if 'owner = @request.auth.id' not in rule: raise RuntimeError(collection + ' owner isolation missing')
+            fields = {r[1] for r in after.execute('PRAGMA table_info(' + quote(added) + ')')}
+            if not required <= fields:
+                raise RuntimeError(collection + ' fields missing')
+            if after.execute('SELECT count(*) FROM ' + quote(added)).fetchone()[0] != 0: raise RuntimeError('New ' + collection + ' collection is not empty')
     print('PASS: existing records, settings, schemas and rules preserved; private ' + collection + ' collection added.', flush=True)
 
 
@@ -91,7 +93,7 @@ if (app / 'pb_migrations' / MIGRATION).exists(): raise RuntimeError('Migration f
 print('Preflight passed; snapshotting databases for isolated rehearsal.', flush=True)
 snapshot(app / 'pb_data/data.db', work / 'before.db')
 with sqlite3.connect(work / 'before.db') as db:
-    if db.execute("SELECT count(*) FROM _collections WHERE name=?", (collection,)).fetchone()[0]: raise RuntimeError(collection + ' already installed')
+    if any(db.execute("SELECT count(*) FROM _collections WHERE name=?", (added,)).fetchone()[0] for added in new_collections): raise RuntimeError(collection + ' already installed')
     names = {r[0] for r in db.execute('SELECT name FROM _collections')}
     if not {'users', 'deadlines', 'groups', 'group_members', 'deadline_preferences'} <= names: raise RuntimeError('Expected TOKI group schema missing')
 runtime = work / 'runtime'

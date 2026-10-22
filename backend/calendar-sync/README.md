@@ -1,134 +1,99 @@
 # Outlook calendar imports
 
-Jupiter fetches published ICS feeds for Compass Security, Hacking-Lab and OST. Imported occurrences are private to the TOKI user specified in each calendar section. URLs, importer credentials and calendar contents must stay outside Git.
+Users manage their private published-calendar URLs and title exclusions in **Android → Account → Calendars & exclusions**. PocketBase stores connections and rules; Jupiter fetches the feeds every four hours. Android syncs when opened or manually refreshed and does not poll in the background.
 
-## Behaviour
+## Manage calendars in Android
 
-- The systemd timer runs every four hours by default, with up to one minute of jitter. Edit its schedule with `systemctl edit toki-calendar-sync.timer`.
-- Android syncs on initial launch, on returning to the foreground and when you press Sync. It does not poll in the background. The phone learns Outlook changes only after Jupiter imports them and the phone syncs.
-- Every timed occurrence gets an alarm five minutes before its start. ICS alarms are ignored. All-day entries appear without alarms and remain visible through their exclusive end date.
-- Events show source calendar names in Android. Shared meetings with the same UID and recurrence identity appear once, listing all matching sources. Distinct UIDs remain separate even when their titles match. Manually created TOKI events are not deduplicated against imports.
-- A one-off move updates the same record. Recurring instances use their original recurrence identity, so moving an instance also preserves its record. EXDATE, RDATE, embedded time zones and recurrence exceptions are expanded on the server.
-- Copies with conflicting revisions use the highest SEQUENCE, then LAST-MODIFIED/DTSTAMP. A cancellation wins a revision tie. Equal revisions otherwise use configuration order. Removing one copy retains a meeting still present in another source; an explicit newer cancellation overrides older copies.
-- The default rolling horizon is seven days in the past through 366 days ahead. Old entries leave TOKI as the window advances. Outlook publication itself can expose a narrower range; only occurrences present in the feeds can be imported.
-- All configured feeds must download and parse successfully before writes begin. A failed feed leaves the backend untouched. Upserts finish before stale entries are deleted. Backend write failures can leave partial updates; the next run reconciles them. Deterministic record IDs and a unique owner/key index prevent duplicates on retry. This is not an atomic multi-record snapshot.
-- Imported records are read-only for normal users, including their owner. Edit or delete the original in Outlook. User-created events, birthdays and tasks are stored separately and never touched by this importer.
+- **Add calendar:** enter a name and published HTTPS ICS subscription URL. The signed-in account automatically owns it; no owner email or administrator credentials are entered in Android.
+- **Edit calendar:** change its name or URL. URLs are masked in the form by default and omitted from the connection list.
+- Use the switch to enable or disable importing. **Remove calendar** asks for confirmation. Disabled/removed sources lose their exclusive imports at the next successful server run; copies still supplied by other enabled sources remain. Removing a source also removes its source-scoped rules.
+- Each connection shows its last successful import and a generic error if fetching failed. **Reload settings** reloads PocketBase settings/status; it does not fetch the ICS feeds.
+- Writes require connectivity. Link drafts stay in memory instead of saved-instance state; connection URLs are not stored in the Android event cache.
 
-## Assign calendars to TOKI users
+Published URLs are credentials: anyone possessing one can read the published feed. The owner-private `calendar_sources` collection contains owner, name, URL, enabled and server-managed import status. Normal clients cannot transfer ownership or forge status fields. Account deletion cascades to its sources and rules. Do not export these records or URLs into Git or logs.
 
-Each calendar section specifies the recipient by their existing TOKI sign-in email:
+## Title exclusions and wildcard patterns
 
-```ini
-[calendar:compass]
-name = Compass Security
-url = https://example.invalid/compass.ics
-user = ivan.buetler@compass-security.com
-```
+In **Account → Calendars & exclusions → Add exclusion**, enter a pattern, choose **All my calendars** or one calendar, then save. Rules can be edited, switched off or deleted. A preview counts matching cached imported events, including individually hidden entries; events already excluded or not yet imported cannot be counted.
 
-Set `user` independently for every source. Sources assigned to the same account are merged and deduplicated together; the same meeting assigned to two accounts produces one private copy for each account. Source labels only list calendars assigned to that recipient.
+| Pattern | Matches |
+| --- | --- |
+| `Marina *` | Titles starting with `Marina ` |
+| `*Vacation*` | Titles containing `Vacation` |
+| `Team ?` | `Team A`, `Team B`, etc. |
+| `Marina in CH` | That exact title |
 
-The importer resolves every email to an existing PocketBase user before any writes. A missing or unknown recipient aborts the import. It does not create accounts or use the recipient's password. Legacy configurations with a global `[pocketbase] owner` record ID still work for calendar sections without `user`; new configurations should use per-calendar emails.
+`*` matches any number of characters; `?` matches one character. Matching is case-insensitive against the whole title and ignores outer whitespace. Other characters, including regex punctuation, are literal. Turning off **Use * and ? wildcards** treats stars and question marks literally too. Patterns are limited to 200 characters and use bounded dynamic matching rather than arbitrary regular expressions.
 
-Changing `user` moves the source's imports on the next successful job. The previous account keeps meetings still supplied by its other sources; copies no longer belonging to that account are removed. Phones learn these changes on their next sync. Exclusion rules apply to all recipients.
+Rules are private to their owner in `calendar_exclusions`. A scoped rule can reference only that owner's source. Rules apply **after deduplication**: a matching merged occurrence is excluded if its selected source is among its copies, so a duplicate from another source cannot reintroduce it. Other users and manually created events, birthdays and tasks are unaffected.
 
-Run only **one importer configuration against this collection**. This job manages all `calendar_events` records, including cleaning up previous recipients when a source is removed or reassigned. Independent jobs with different configurations would remove each other's records.
+Rules take effect at the next successful Jupiter import. Matching existing imports are removed; disabling/deleting a rule allows them to return. Open TOKI or press Sync afterward to update the phone and cancel removed events' alarms. Rule changes do not modify Outlook. Existing individual hide preferences remain independent.
 
-## Personal hide preferences in Android
+## Import behaviour
 
-**Hide in TOKI** hides one imported occurrence for the signed-in user. **Events → Hidden events → Restore event** reverses it. It does not change Outlook, other users or the server's exclusion list. It removes the occurrence from normal lists, search, summary tiles and future alarms on that device after server confirmation. Other updated devices apply the preference on their next sync; no background polling is added.
+- Timed occurrences always get a five-minute reminder. ICS alarms are ignored. All-day entries have no alarm and remain visible through their exclusive end date.
+- The default horizon is seven days in the past through 366 days ahead. Outlook can publish a narrower window. Entries leave TOKI as they leave the imported window.
+- Shared meetings merge by UID and original recurrence identity **within each user** and list all matching source names. Different UIDs are not merged by title. The same meeting assigned to two users produces two private copies.
+- Recurrence exceptions, exclusions/additions and embedded time zones are expanded on Jupiter. Moving a one-off or recurring occurrence preserves its identity. The highest SEQUENCE, then modification timestamp, wins conflicts; cancellation wins ties. Otherwise source order resolves equal revisions.
+- Each account's enabled feeds must all succeed before its events are changed. A failed feed preserves that account's existing imports, including while rules are being edited. Other accounts can continue importing. Import-status messages never include URL or event content.
+- Upserts complete before stale records are deleted. Backend write failures can leave partial updates; retrying reconciles them. Deterministic IDs and unique owner/key indexes prevent duplicates. Multi-record synchronization is not atomic.
+- One importer configuration manages this dedicated `calendar_events` collection. Do not run independent configurations against the same collection.
 
-The additive `1792713601_calendar_preferences.js` migration creates `calendar_preferences`, with owner, stable `external_key` and `hidden`. Owners can read only their own preferences, create them only for an occurrence currently assigned to them, and update only the hidden flag without transferring ownership or changing the key. A unique owner/key index handles concurrent creation. Account deletion cascades to preferences. The key is deliberately not a relation to the imported record: deleting/recreating an occurrence, or leaving/re-entering the import horizon, must preserve its hidden state. The importer never edits this collection.
+## Hide individual occurrences
 
-Only occurrences are supported, not entire recurring series. The Hidden events view shows currently imported hidden occurrences. Entries removed by server exclusions or absent from the feed/horizon cannot be restored through that view until they are imported again. Restoring does not replay reminders that already passed. Hide/restore needs an online write; cached hidden state remains effective offline and after reboot.
+Expand an imported event and use **Hide in TOKI** directly beneath its title. Restore through **Events → Hidden events → Restore event** (swipe the filter row if necessary). Hiding suppresses normal lists, search, summary tiles and future alarms, without changing Outlook or other users.
 
-Deploy the preference schema separately after the calendar collection exists:
+Owner-private `calendar_preferences` stores the stable occurrence key and hidden flag separately from imported records. Hides survive deletion/reimport and leaving/re-entering the horizon. Other updated devices learn changes on sync. Restoring does not replay a reminder that already passed. Entire-series hiding is not implemented. The Hidden events filter shows currently imported occurrences; entries absent from Outlook or excluded by a rule cannot be restored there until imported again.
 
-```sh
-./backend/scripts/apply-jupiter-calendar-preferences.sh --host root@jupiter
-./backend/scripts/apply-jupiter-calendar-preferences.sh --host root@jupiter --apply
-```
+## Runtime configuration and approved hosts
 
-The wrapper rehearses first, verifies a stopped-service backup, preserves existing data/rules, and retains a private recovery archive. Rollback requires restoring that verified backup and matching application version, not dropping preferences. The migration was deployed on 22 October 2026; backup: `/opt/applic/pocketbase/backups-toki-calendar_preferences-20261022T132851Z-w30ncmiz`.
-
-## Exclude unwanted events
-
-Edit the private configuration on Jupiter:
-
-```sh
-ssh root@jupiter
-sudoedit /etc/toki-calendar/config.ini
-```
-
-Add or edit this section, keeping the other sections unchanged:
+`/etc/toki-calendar/config.ini` now holds only service credentials and runtime settings, not user URLs or exclusions. Keep it mode 600 and outside Git. Example:
 
 ```ini
-[exclude]
-titles =
-    Marina in CH
-    Another exact title
+[pocketbase]
+url = https://pocketbase.hacking-lab.com
+email = PRIVATE_SERVICE_IDENTITY
+password = PRIVATE_SERVICE_PASSWORD
+
+[sync]
+settings_source = pocketbase
+allowed_hosts = outlook.office365.com
+past_days = 7
+future_days = 366
+timezone = Europe/Zurich
+max_occurrences = 20000
 ```
 
-Enter one complete title per line. Matching ignores case and leading/trailing whitespace; it does not use substring matching or wildcards. The rules apply across every configured calendar **after deduplication**, so another source's copy cannot reintroduce the matching merged event. Only imported calendar records are affected; manually created TOKI events are untouched. The job logs the excluded count, without logging titles.
+The dedicated importer superuser performs reconciliation; Android uses normal user credentials. Treat the service identity as a server-administration secret. HTTPS feed hosts must be explicitly approved in `allowed_hosts` (whitespace-separated hostnames); Outlook is approved by default. Credentials in URLs, nonstandard ports, fragments, redirects and private/reserved DNS addresses are rejected before fetching user-managed feeds. Additional providers require administrator approval, not a user-controlled allowlist.
 
-Run `systemctl start toki-calendar-sync.service` to apply the change immediately, or wait for the next scheduled run. Existing matching imports are deleted on a successful import. Open TOKI or press Sync afterward to remove them and cancel their alarms on the phone. Removing a title from this list allows matching events to return on the next successful import. Leave `titles =` empty to disable title exclusions.
+## Run manually and change the schedule
 
-The initial rule excludes **Marina in CH**. Reinstalling the service preserves remotely maintained exclusions unless the supplied configuration explicitly includes an `[exclude]` section.
-
-## Configuration
-
-Copy `config.ini.example` to `config.ini` and run `chmod 600 config.ini`. This filename is ignored by Git. Use stable, unique source names. Floating times and all-day dates use the configured time zone; explicit ICS time zones take precedence for timed events.
-
-For a manual dry run, run `.venv/bin/python import_calendars.py --config config.ini`; add `--apply` to write changes.
-
-The importer uses a dedicated PocketBase superuser because it must reconcile a collection locked against client writes. Protect its credentials as server administration secrets. No credentials or event text are logged. The installer creates a random dedicated identity; it does not reuse your TOKI password.
-
-## Deployment from macOS
-
-Rehearse and deploy the additive migration, then install the service. The schema wrapper defaults to rehearsal; `--apply` makes a verified backup and briefly stops PocketBase.
-
-```sh
-./backend/scripts/apply-jupiter-calendars.sh --host root@jupiter
-./backend/scripts/apply-jupiter-calendars.sh --host root@jupiter --apply
-./backend/scripts/install-jupiter-calendars.sh \
-  --host root@jupiter \
-  --owner-email YOUR_TOKI_EMAIL \
-  --config backend/calendar-sync/config.ini
-```
-
-The installer targets the existing `pocketbase` container on Jupiter and `https://pocketbase.hacking-lab.com`. It validates the CLI default account read-only, fills missing calendar `user` values from `--owner-email` without overriding explicit recipients, installs the service under `/opt/toki-calendar`, stores private configuration at `/etc/toki-calendar/config.ini`, validates a dry run, runs the initial import and enables the timer. Reinstalling keeps the existing importer identity. Do not rerun the schema deployment once installed.
-
-Inspect status without exposing secrets:
-
-```sh
-ssh root@jupiter 'systemctl list-timers toki-calendar-sync.timer; systemctl status toki-calendar-sync.service'
-ssh root@jupiter 'journalctl -u toki-calendar-sync.service -n 20 --no-pager'
-```
-
-Run manually:
+From macOS:
 
 ```sh
 ssh root@jupiter 'systemctl start toki-calendar-sync.service'
+ssh root@jupiter 'journalctl -u toki-calendar-sync.service -n 20 --no-pager'
+ssh root@jupiter 'systemctl list-timers toki-calendar-sync.timer'
 ```
 
-### Change the schedule
+Then open TOKI or press Sync. The server import and phone refresh are separate steps; a phone refresh does not trigger a server import. Outlook publication can introduce additional delay.
 
-Connect to Jupiter and open the timer override:
+Change the schedule on Jupiter:
 
 ```sh
 ssh root@jupiter
 systemctl edit toki-calendar-sync.timer
 ```
 
-For example, run every two hours:
+For example, every two hours:
 
 ```ini
-# systemctl edit toki-calendar-sync.timer
 [Timer]
 OnCalendar=
 OnCalendar=*-*-* 00/2:00:00
 ```
 
-The empty `OnCalendar=` clears the previous schedule. Save the override, then apply it and check the next run:
+The empty entry clears the old schedule. Apply it:
 
 ```sh
 systemctl daemon-reload
@@ -136,37 +101,67 @@ systemctl restart toki-calendar-sync.timer
 systemctl list-timers toki-calendar-sync.timer
 ```
 
-| Frequency | `OnCalendar` value |
+| Frequency | `OnCalendar` |
 | --- | --- |
-| Every hour | `*-*-* *:00:00` |
+| Hourly | `*-*-* *:00:00` |
 | Every four hours (default) | `*-*-* 00,04,08,12,16,20:00:00` |
 | Daily at 06:00 | `*-*-* 06:00:00` |
 
-Schedules follow Jupiter’s configured time zone and may run up to one minute later because of the timer’s randomized delay. Configuration changes to source URLs, exclusions or import horizon take effect on the next run; they do not require a timer restart.
+Times follow Jupiter's configured zone, with up to one minute of random delay. To pause imports, disable the timer with `systemctl disable --now toki-calendar-sync.timer` and stop any active service. Existing records remain.
 
-To pause imports, run `systemctl disable --now toki-calendar-sync.timer` and stop any active service. Existing records remain. To remove a source, remove its section and run the importer; meetings belonging only to that source disappear. At least one source must remain configured. To remove every imported record, use a deliberate administrator operation; an accidentally empty configuration is rejected.
+## Schema deployment and legacy migration
+
+Apply the calendar schema, then private hide preferences, then private user settings. Each wrapper defaults to an isolated rehearsal. Use `--apply` only after rehearsal; it creates and verifies a stopped-service backup, preserves data/rules and checks health. Do not rerun a wrapper once its migration is installed.
+
+```sh
+./backend/scripts/apply-jupiter-calendars.sh --host root@jupiter
+./backend/scripts/apply-jupiter-calendar-preferences.sh --host root@jupiter
+./backend/scripts/apply-jupiter-calendar-settings.sh --host root@jupiter
+```
+
+For a new runtime, follow `config.ini.example` and install with:
+
+```sh
+./backend/scripts/install-jupiter-calendars.sh \
+  --host root@jupiter --owner-email YOUR_EXISTING_TOKI_EMAIL \
+  --config backend/calendar-sync/config.ini
+```
+
+Users then add connections in Android. The CLI email validates the existing account during installation; it does not override app-managed source ownership.
+
+Legacy `settings_source=config` mode still supports `[calendar:...]` sections with `name`, `url`, `user`, and the old exact `[exclude] titles` list. To migrate an existing deployment, first retain a private copy of the old config, install `migrate_settings.py` beside the updated importer, stop its timer/service, and run with the runtime Python:
+
+```sh
+/opt/toki-calendar/.venv/bin/python /opt/toki-calendar/migrate_settings.py \
+  --config /etc/toki-calendar/config.ini
+/opt/toki-calendar/.venv/bin/python /opt/toki-calendar/migrate_settings.py \
+  --config /etc/toki-calendar/config.ini --apply
+```
+
+Migration resolves legacy recipient emails, preserves existing exact rules, creates deterministic settings records and switches to PocketBase mode only after successful writes. It refuses to overwrite existing app-managed changes. Repeating after a partial migration resumes matching records. It removes user URL/exclusion sections from the active INI. Then restart the timer and run the service. The installer preserves PocketBase mode on subsequent installs.
+
+## Verification and recovery
+
+On 22 October 2026, Jupiter's three sources and four exact-title exclusions migrated to PocketBase. The first comparison reported 268 unchanged imported occurrences, with no creates, updates or deletions caused by migration. The four-hour timer remains in use. Source URLs and service credentials were never added to Git.
+
+Retained private backups:
+
+- Calendar events: `/opt/applic/pocketbase/backups-toki-calendar_events-20261022T121327Z-hg7ogshu`
+- Hide preferences: `/opt/applic/pocketbase/backups-toki-calendar_preferences-20261022T132851Z-w30ncmiz`
+- User settings: `/opt/applic/pocketbase/backups-toki-calendar_settings-20261022T135558Z-uu65r7uz`
+- Previous runtime/config: `/var/backups/toki-calendar-settings-20261022T135758Z`
+
+Recovery follows the [migration recovery procedure](../GROUPS.md): stop timer/service, preserve failed data, restore the full archive with ownership, remove the corresponding new migration before restarting and use the matching app/runtime. Do not drop collections containing user settings. The backup verifier includes committed SQLite WAL data.
 
 ## Tests
 
 ```sh
 python3 -m venv /tmp/toki-calendar-venv
 /tmp/toki-calendar-venv/bin/pip install -r backend/calendar-sync/requirements.txt
-cd backend/calendar-sync
-/tmp/toki-calendar-venv/bin/python -m unittest -v test_import_calendars
+/tmp/toki-calendar-venv/bin/python -m unittest discover -s backend/calendar-sync -v
+python3 backend/scripts/test_migration_snapshot.py
 ```
 
-`test_backend.py` additionally exercises real PocketBase rules, owner isolation, denied client writes, repeated-import idempotency, moved events, deletion and account cascades. Set `TOKI_TEST_URL`, `TOKI_TEST_EMAIL` and `TOKI_TEST_PASSWORD` only for a disposable instance with all migrations installed. Never run this fixture against production.
+The disposable `test_backend.py` lifecycle suite needs `TOKI_TEST_URL`, `TOKI_TEST_EMAIL` and `TOKI_TEST_PASSWORD` pointing only at an isolated backend with all migrations installed. It verifies private URLs/rules, denied ownership/status changes, source scoping, deletion cascades, hide persistence and event reconciliation. Never run that provisioning test against production. Android tests cover wildcard preview/scoping and connection forms with fictional data.
 
-The calendar migration was rehearsed against Jupiter, preserving existing records/settings/rules. The stopped-backup verifier includes retained SQLite WAL data instead of ignoring it. Retain the printed verified backup outside Git. Recovery follows the [existing migration recovery procedure](../GROUPS.md): stop the service and timer, preserve failed data, restore the full archive with ownership, remove the new migration file before restart, and restore the matching app version.
-
-## Deployment verification (22 October 2026)
-
-Deployed to Jupiter with a verified backup at `/opt/applic/pocketbase/backups-toki-calendar_events-20261022T121327Z-hg7ogshu`. The first import created 380 occurrences, including 111 with multiple source calendars and 11 all-day entries. A subsequent dry run reported 380 unchanged records and no creates, updates or deletions. Counts reflect the published feeds and rolling horizon at that time. The timer is enabled. Real feed URLs and service credentials are excluded from Git.
-
-The exact-title exclusion was deployed on 22 October 2026. It removed 45 matching occurrences, leaving 335 imports at verification time. No matching imports remained, and the timer stayed active. These counts change as the feeds and import window change.
-
-Validation passed 20 importer unit cases, a real disposable-backend API/privacy lifecycle test, and the retained-WAL backup regression. Android passed 48 unit tests plus the calendar source-label and API mapping checks.
-
-Per-calendar recipient emails were deployed on 22 October 2026. All three existing sources remain assigned to the original account; no ownership transfer was requested for them. Recipient resolution and reassignment privacy were checked against a disposable backend.
-
-Hide/restore validation on 22 October 2026 passed the disposable-backend lifecycle/privacy test, 50 Android unit tests and 49 phone UI/API/cache checks. The migration rehearsal and deployment preserved existing records, schemas, settings and access rules. Build and lint passed. No real event was hidden by the synthetic tests.
+Validation on 22 October 2026 passed 24 importer/settings unit cases, the disposable-backend lifecycle/privacy suite, 53 Android unit tests and 52 phone UI/API/cache checks (one activity-availability failure passed on targeted retry). Build and lint passed. Migration and runtime checks preserved the existing imported occurrences.
