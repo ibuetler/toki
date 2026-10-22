@@ -32,11 +32,12 @@ Real Android screens with fictional sample data. See the [illustrated user guide
 ## Architecture
 
 ```text
-PocketBase                         Android app
-Authentication            <--REST-->  Synchronization
-Private events, birthdays, tasks      Local Room database
-Recurrence rules                      Occurrence calculation
-                                      AlarmManager → audible reminders
+PocketBase                                        Android app
+=================================                 ================================
+Authentication                     <--REST-->     Synchronization
+Private events, birthdays, tasks                  Local Room database
+Recurrence rules                                  Occurrence calculation
+                                                  AlarmManager → audible reminders
 ```
 
 PocketBase stores events, birthdays and tasks and controls access to each user's records. Android caches them locally, calculates upcoming occurrences, and schedules reminders on the device so cached reminders work offline. Sync runs on sign-in, after event/birthday creation and editing, and when requested manually. Task writes update the local cache and alarms from the server response. Global search uses the cache without a network request.
