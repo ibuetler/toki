@@ -15,12 +15,18 @@ TOKI is a deadline management project with a PocketBase backend and a working Ko
 
 ## App screenshots
 
-Real Android screens with fictional sample data. See the [illustrated user guide](docs/ANDROID_GUIDE.md) for all ten screenshots and step-by-step usage.
+Real Android screens with fictional sample data. See the [illustrated user guide](docs/ANDROID_GUIDE.md) for all 17 screenshots and step-by-step usage. The calendar settings and hide/restore examples were captured on 22 October 2026.
 
 <p>
   <img src="docs/screenshots/android/agenda.png" alt="TOKI Agenda with next alarm, event and birthday" width="230">
   <img src="docs/screenshots/android/tasks.png" alt="TOKI tasks with priority badges and completion checkboxes" width="230">
   <img src="docs/screenshots/android/search.png" alt="TOKI global search across events, birthdays and completed tasks" width="230">
+</p>
+
+<p>
+  <img src="docs/screenshots/android/calendar-connections.png" alt="TOKI calendar connections with private import settings" width="230">
+  <img src="docs/screenshots/android/new-exclusion.png" alt="TOKI wildcard exclusion pattern and match preview" width="230">
+  <img src="docs/screenshots/android/imported-event.png" alt="TOKI imported event with prominent Hide in TOKI action" width="230">
 </p>
 
 ## Architecture

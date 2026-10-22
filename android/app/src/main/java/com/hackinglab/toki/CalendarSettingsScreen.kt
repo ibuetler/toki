@@ -84,7 +84,7 @@ internal fun CalendarSettingsScreen(state: TokiState, onClose: () -> Unit, onRel
 
 @Composable private fun SettingsForm(title: String, busy: Boolean, error: String?, onClose: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
     Dialog(onDismissRequest = { if (!busy) onClose() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Surface(Modifier.fillMaxSize()) { Column(Modifier.fillMaxSize().systemBarsPadding().imePadding().verticalScroll(rememberScrollState()).padding(20.dp)) {
+        Surface(Modifier.fillMaxSize()) { Column(Modifier.fillMaxSize().systemBarsPadding().imePadding().verticalScroll(rememberScrollState()).padding(20.dp).testTag("calendar-settings-form")) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(title, style = MaterialTheme.typography.headlineSmall)
                 TextButton(onClick = onClose, enabled = !busy) { Text("Cancel") }

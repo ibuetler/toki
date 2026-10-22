@@ -1,6 +1,6 @@
 # TOKI Android user guide
 
-TOKI keeps dated events, yearly birthdays and quick tasks in separate lists. This guide describes the Android app as of 22 October 2026. The screenshots were captured on 21 October 2026 from the real Compose screens on an Android phone with fictional sample data; no personal records or credentials are pictured.
+TOKI keeps dated events, yearly birthdays and quick tasks in separate lists. This guide describes the Android app as of 22 October 2026. The original screens were captured on 21 October 2026; calendar settings, exclusions and hide/restore screens were captured on 22 October 2026. All images show real Compose screens on an Android phone with fictional sample data; no personal records or credentials are pictured.
 
 For building, installation, recurrence details and troubleshooting, see the [Android technical guide](../android/README.md). The [iOS app](../ios/README.md) is currently an alarm prototype and does not yet provide these screens.
 
@@ -96,7 +96,13 @@ Jupiter checks the feeds every four hours by default. After that import, open TO
 
 ### Connect calendars and exclude titles
 
+| Account entry point | Calendar connections |
+| --- | --- |
+| <img src="screenshots/android/account.png" alt="Account screen with the Calendars and exclusions button" width="260"> | <img src="screenshots/android/calendar-connections.png" alt="Fictional Studio and Community calendar connections with import status and edit controls" width="260"> |
+
 Open **Account → Calendars & exclusions**. Add a calendar name and its published HTTPS ICS URL; it belongs automatically to your signed-in TOKI account. Edit, disable or remove connections there, and check their last import/error status. Links are masked in the form and never displayed in the connection list. Outlook publishing links are supported by default; other providers need administrator approval.
+
+<img src="screenshots/android/new-calendar.png" alt="Add calendar form showing a fictional calendar name and a masked published ICS URL" width="300">
 
 Tap **Add exclusion**, enter a title pattern and choose all your calendars or one source:
 
@@ -105,6 +111,10 @@ Tap **Add exclusion**, enter a title pattern and choose all your calendars or on
 | `Marina *` | Titles starting with “Marina ” |
 | `*Vacation*` | Titles containing “Vacation” |
 | `Team ?` | Titles such as “Team A” |
+
+| Saved exclusion rules | Pattern and match preview |
+| --- | --- |
+| <img src="screenshots/android/exclusion-rules.png" alt="Marina wildcard rule for all calendars and a Vacation rule scoped to Studio" width="260"> | <img src="screenshots/android/new-exclusion.png" alt="Add exclusion form with Marina wildcard pattern, scope selector and two matching cached events" width="260"> |
 
 Matching ignores case and covers the whole title. `*` means any number of characters; `?` means one. Other regex punctuation is literal. Turn off **Use * and ? wildcards** for a completely literal title match. The preview counts currently cached imported occurrences, including hidden ones; items already excluded or not imported yet cannot be counted. Rules can be edited, disabled or deleted.
 
@@ -123,6 +133,10 @@ A new or edited rule does not immediately remove meetings from your phone. Wait 
 If a connection shows an error, check that its URL is a published subscription link and that the source is enabled. **Not imported yet** means there has been no successful import for that connection. If your provider is not approved, ask the server administrator to review it. A failed feed preserves your previous imported events rather than deleting them. Offline, cached events remain available, but editing calendar settings needs connectivity.
 
 ### Hide an imported occurrence
+
+| Hide an imported occurrence | Restore from Hidden events |
+| --- | --- |
+| <img src="screenshots/android/imported-event.png" alt="Imported Project review event showing source calendars and prominent Hide in TOKI button beneath its title" width="260"> | <img src="screenshots/android/hidden-events.png" alt="Hidden events filter selected with an expanded fictional meeting and Restore event button" width="260"> |
 
 Expand an imported event and tap the prominent **Hide in TOKI** button directly below its title. It disappears from the normal event list, search and summary tiles, and its future alarm is cancelled on this phone. Outlook and other users' calendars are unchanged. Hiding requires an internet connection; the preference is applied locally after PocketBase confirms it.
 

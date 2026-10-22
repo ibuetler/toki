@@ -2,7 +2,7 @@
 
 Kotlin/Compose app for `https://pocketbase.hacking-lab.com`, package `com.hackinglab.toki`, minimum Android 8 (API 26).
 
-Read the [illustrated Android user guide](../docs/ANDROID_GUIDE.md) for screenshots of Events, Birthdays, Tasks, search, creation forms, alarm setup and back-to-top navigation.
+Read the [illustrated Android user guide](../docs/ANDROID_GUIDE.md) for screenshots of Events, Birthdays, Tasks, search, creation forms, alarm setup, back-to-top navigation, calendar connections, wildcard exclusions and hide/restore.
 
 ## Implemented
 
@@ -108,7 +108,7 @@ Sync runs on sign-in, app launch/return to the foreground, after event/birthday 
 
 ## Build and verify
 
-Calendar and navigation verification on **22 October 2026**: **53 unit tests and 52 phone UI/API/cache checks passed**; build and lint passed. Checks cover calendar connection forms, wildcard preview/scoping, private settings lists, hide/restore, hidden preference mapping, suppression of hidden alarms/search results, existing navigation, paginated imports, old backends, failed snapshots and migration from the original cache to version 6. The separate ten-screen capture fixture was last verified on **21 October 2026**. Screenshots use fictional in-memory data; these checks do not establish audible delivery, offline delivery or reboot behaviour on the physical phone. Backend preference privacy and persistence across deletion/reimport were verified in a disposable backend; see the [calendar guide](../backend/calendar-sync/README.md).
+Calendar and navigation verification on **22 October 2026**: **53 unit tests and 52 phone UI/API/cache checks passed**; build and lint passed. Checks cover calendar connection forms, wildcard preview/scoping, private settings lists, hide/restore, hidden preference mapping, suppression of hidden alarms/search results, existing navigation, paginated imports, old backends, failed snapshots and migration from the original cache to version 6. The original ten-screen capture was verified on **21 October 2026**. A separate seven-screen calendar/settings/hide capture passed on **22 October 2026**, using fictional in-memory data. Screenshots use fictional in-memory data; these checks do not establish audible delivery, offline delivery or reboot behaviour on the physical phone. Backend preference privacy and persistence across deletion/reimport were verified in a disposable backend; see the [calendar guide](../backend/calendar-sync/README.md).
 
 
 Use Android Studio's configured JDK/SDK and the committed Gradle wrapper:

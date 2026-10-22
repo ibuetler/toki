@@ -34,10 +34,10 @@ class TokiDocumentationScreenshots {
         this.id = id; this.title = title; this.priority = priority; this.completed = completed
         notes = "A quick thought to follow up when there is time."; createdMillis = at(-1, 12)
     }
-    private fun capture(name: String, tag: String? = null) {
+    private fun capture(name: String, tag: String? = null, scrollToHeading: Boolean = true) {
         androidx.test.espresso.Espresso.closeSoftKeyboard()
         screen.waitForIdle()
-        if (tag != null) {
+        if (tag != null && scrollToHeading) {
             val heading = when (name) { "new-event" -> "New event"; "new-birthday" -> "New birthday"; "new-task" -> "New task"; else -> "Search TOKI" }
             screen.onNodeWithTag(tag).performScrollToNode(hasText(heading))
         }
@@ -52,6 +52,74 @@ class TokiDocumentationScreenshots {
             screen.onNodeWithContentDescription("Back to top").performClick()
         else screen.onNodeWithTag("agenda-content").performScrollToIndex(0)
         screen.onNodeWithContentDescription("Search TOKI").assertIsDisplayed()
+    }
+    @Test fun captureCalendarGuide() {
+        val sources = listOf(
+            CalendarSource(id = "studio", name = "Studio", url = "https://outlook.office365.com/example/studio.ics", lastSuccess = "2026-10-22 12:00:00.000Z"),
+            CalendarSource(id = "community", name = "Community", url = "https://outlook.office365.com/example/community.ics", lastSuccess = "2026-10-22 12:00:00.000Z"))
+        val rules = listOf(CalendarRule(id = "travel", pattern = "Marina *"), CalendarRule(id = "holiday", pattern = "*Vacation*", source = "studio"))
+        val imported = event("calendar:planning", "Project review", 1, 10).apply {
+            kind = "calendar"; externalKey = "a".repeat(64); sourceNames = "Studio · Community"; reminderMinutes = 5
+            description = "Review the demo milestones and agree on next steps."
+        }
+        val hidden = event("calendar:hidden", "Optional catch-up", 2, 11).apply {
+            kind = "calendar"; externalKey = "b".repeat(64); sourceNames = "Community"; this.hidden = true; reminderMinutes = 5
+            description = "An optional demonstration meeting."
+        }
+        val examples = listOf("Marina in CH", "Marina visiting friends").mapIndexed { index, title ->
+            event("calendar:example$index", title, index + 3L, 12).apply {
+                kind = "calendar"; externalKey = (index + 3).toString().repeat(64); sourceNames = "Studio"; reminderMinutes = 5
+            }
+        }
+        val records = listOf(imported, hidden) + examples
+        val state = TokiState(ready = true, calendarHidingAvailable = true,
+            session = Session("fictional-preview", "demo", "demo@example.com"), deadlines = records,
+            calendarSettings = CalendarSettings(sources, rules), deletePermissionsLoaded = true,
+            exactAllowed = true, notificationsAllowed = true, fullScreenAllowed = true,
+            scheduled = 3, lastSync = System.currentTimeMillis() - 120_000,
+            previews = records.associate { it.id to EventPreview(it.startMillis, nextReminderStart = if (it.hidden) null else it.startMillis) })
+        screen.setContent {
+            val view = LocalView.current
+            DisposableEffect(view) { val previous = view.keepScreenOn; view.keepScreenOn = true; onDispose { view.keepScreenOn = previous } }
+            TOKITheme(darkTheme = false) {
+                TokiScreen(state, onLogin = { _, _ -> }, onSync = {}, onLogout = {}, onTest = {},
+                    onNotifications = {}, onExact = {}, onFullScreen = {})
+            }
+        }
+        screen.onNodeWithTag("next-event-tile").performClick()
+        screen.onNodeWithText("Hide in TOKI").assertIsDisplayed()
+        capture("imported-event")
+        screen.onNodeWithTag("agenda-content").performScrollToNode(hasTestTag("event-filters"))
+        screen.onNodeWithTag("event-filters").performScrollToNode(hasText("Hidden events"))
+        screen.onNodeWithText("Hidden events").performClick()
+        screen.onNodeWithTag("agenda-content").performScrollToNode(hasTestTag("event-calendar:hidden"))
+        screen.onNodeWithTag("event-calendar:hidden").performClick()
+        screen.onNodeWithText("Imported calendar event. Edit or delete it in Outlook, then sync TOKI after the next calendar import.").performScrollTo()
+        screen.onNodeWithText("Restore event").assertIsDisplayed()
+        capture("hidden-events")
+        screen.onNodeWithText("Account", useUnmergedTree = true).performClick()
+        screen.onNodeWithText("Calendars & exclusions").performScrollTo().assertIsDisplayed()
+        screen.onNodeWithTag("agenda-content").performScrollToIndex(0)
+        capture("account")
+        screen.onNodeWithText("Calendars & exclusions").performScrollTo().performClick()
+        screen.onNodeWithText("Studio").assertExists()
+        capture("calendar-connections", "calendar-settings", false)
+        screen.onNodeWithTag("calendar-settings").performScrollToIndex(8)
+        screen.onNodeWithText("Marina *").assertIsDisplayed()
+        capture("exclusion-rules", "calendar-settings", false)
+        screen.onNodeWithText("Add exclusion").performScrollTo().performClick()
+        screen.onNodeWithText("Title pattern").performTextInput("Marina *")
+        screen.onNodeWithText("Matches 2 currently imported events").assertExists()
+        capture("new-exclusion", "calendar-settings-form", false)
+        screen.onNodeWithText("Cancel").performClick()
+        screen.onNodeWithTag("calendar-settings").performScrollToIndex(0)
+        screen.onNodeWithText("Add calendar").performScrollTo().performClick()
+        screen.onNodeWithText("Calendar name").performTextInput("Workshop calendar")
+        screen.onNodeWithText("Published ICS URL").performTextInput("https://outlook.office365.com/example/workshops.ics")
+        capture("new-calendar", "calendar-settings-form", false)
+        screen.onNodeWithText("Cancel").performClick()
+        screen.onNodeWithTag("calendar-settings").performScrollToIndex(0)
+        screen.onNodeWithText("Done").performClick()
     }
     @Test fun captureIllustratedGuide() {
         val events = listOf(event("planning", "Team planning", 1, 9), event("coffee", "Coffee with Alex", 2, 10),
