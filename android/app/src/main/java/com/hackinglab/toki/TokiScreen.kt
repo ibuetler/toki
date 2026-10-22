@@ -102,6 +102,7 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
     val scrollScope = rememberCoroutineScope()
     var detailReturn by rememberSaveable { mutableStateOf<ArrayList<String>?>(null) }
     var restorePosition by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    var expandedItems by rememberSaveable { mutableStateOf(arrayListOf<String>()) }
     val showBackToTop by remember { derivedStateOf { agendaListState.firstVisibleItemIndex > 1 } }
     LaunchedEffect(tab) { if (tab != 0) agendaListState.scrollToItem(0) }
     LaunchedEffect(restorePosition) {
@@ -110,18 +111,36 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
             restorePosition = null
         }
     }
-    BackHandler(enabled = signedIn && detailReturn != null && !searchOpen && !creating && !taskForm &&
-        state.editing == null && deletingId == null && deletingTaskId == null) {
+    fun recordExpansion(id: String, expanded: Boolean) {
+        expandedItems = ArrayList(expandedItems.filterNot { it == id }).apply { if (expanded) add(id) }
+    }
+    fun returnToMainPage() {
         detailReturn?.let { origin ->
-            tab = origin[0].toInt()
             taskList = origin[1].toBoolean()
             birthdayList = origin[2].toBoolean()
-            completedTasks = origin[3].toBoolean()
-            filter = origin[4]
-            revealId = null
-            revealVersion++
-            restorePosition = origin[5].toInt() to origin[6].toInt()
-            detailReturn = null
+        }
+        tab = 0
+        filter = "Upcoming"
+        completedTasks = false
+        revealId = null
+        revealVersion++
+        expandedItems = arrayListOf()
+        restorePosition = 0 to 0
+        detailReturn = null
+    }
+    val awayFromMain = tab != 0 || detailReturn != null || expandedItems.isNotEmpty() ||
+        agendaListState.firstVisibleItemIndex > 0 || agendaListState.firstVisibleItemScrollOffset > 0 ||
+        (!taskList && filter != "Upcoming") || (taskList && completedTasks)
+    BackHandler(enabled = awayFromMain || searchOpen || creating || taskForm || state.editing != null ||
+        deletingId != null || deletingTaskId != null) {
+        when {
+            searchOpen -> searchOpen = false
+            creating -> if (!state.busy) creating = false
+            taskForm -> if (!state.busy) { taskForm = false; editingTaskId = null; onClearTaskError() }
+            state.editing != null -> if (!state.busy) onCloseEdit()
+            deletingId != null -> deletingId = null
+            deletingTaskId != null -> deletingTaskId = null
+            else -> returnToMainPage()
         }
     }
     fun revealItem(id: String, kind: String, completed: Boolean = false) {
@@ -212,6 +231,9 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
                     }
                 }
             }
+            if (tab != 0) item {
+                TextButton(onClick = { returnToMainPage() }) { Text("Return to main page") }
+            }
             if (state.busy || !state.ready) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
             state.message?.let { message -> item {
                 Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = MaterialTheme.shapes.medium) {
@@ -294,7 +316,7 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
                         if (tasks.isEmpty()) item { Text(if (completedTasks) "No completed tasks." else "A clear head starts here. Tap + New task to capture a thought.", style = MaterialTheme.typography.bodyMedium) }
                         items(tasks, key = { "task:${it.id}" }) { task ->
                             TaskCard(task, state.busy, now, { onCompleteTask(task.id, it) },
-                                { editingTaskId = task.id; onClearTaskError(); taskForm = true }, { deletingTaskId = task.id }, focused = revealId == "task:${task.id}", revealVersion = revealVersion)
+                                { editingTaskId = task.id; onClearTaskError(); taskForm = true }, { deletingTaskId = task.id }, focused = revealId == "task:${task.id}", revealVersion = revealVersion, onExpansionChanged = { recordExpansion("task:${task.id}", it) })
                         }
                     } else {
                     item { LazyRow(Modifier.testTag("event-filters"), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -316,7 +338,7 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
                                 Modifier.padding(top = if (index == 0) 0.dp else 6.dp, start = 4.dp),
                                 style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            EventCard(event, state.previews[event.id], permissionReady, now, border, state.busy, event.id in state.deletableIds, state.deletePermissionsLoaded, focused = revealId == event.id, revealVersion = revealVersion, onEdit = { onEdit(event.id) }, onDelete = { deletingId = event.id })
+                            EventCard(event, state.previews[event.id], permissionReady, now, border, state.busy, event.id in state.deletableIds, state.deletePermissionsLoaded, focused = revealId == event.id, revealVersion = revealVersion, onExpansionChanged = { recordExpansion(event.id, it) }, onEdit = { onEdit(event.id) }, onDelete = { deletingId = event.id })
                         }
                     }
                     }
@@ -464,8 +486,9 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
     }
 }
 
-@Composable private fun EventCard(event: Deadline, preview: EventPreview?, permissionsReady: Boolean, now: Long, dateColor: Color, busy: Boolean, canDelete: Boolean, permissionsLoaded: Boolean, focused: Boolean = false, revealVersion: Int = 0, onEdit: () -> Unit, onDelete: () -> Unit) {
+@Composable private fun EventCard(event: Deadline, preview: EventPreview?, permissionsReady: Boolean, now: Long, dateColor: Color, busy: Boolean, canDelete: Boolean, permissionsLoaded: Boolean, onExpansionChanged: (Boolean) -> Unit = {}, focused: Boolean = false, revealVersion: Int = 0, onEdit: () -> Unit, onDelete: () -> Unit) {
     var expanded by rememberSaveable(event.id) { mutableStateOf(focused) }
+    LaunchedEffect(expanded) { onExpansionChanged(expanded) }
     LaunchedEffect(focused, revealVersion) { if (focused) expanded = true else if (revealVersion > 0) expanded = false }
     val time = preview?.nextStart ?: event.startMillis
     val reminderPassed = preview?.nextStart != null && EventTime.reminderAt(preview.nextStart, event.reminderMinutes) <= now

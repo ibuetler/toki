@@ -81,10 +81,12 @@ This excludes November 2 and adds November 4 at 09:00 local time. These exceptio
 1. Install the debug build from Android Studio or follow the [build instructions](android/README.md#build-and-verify), then sign in with a PocketBase user account.
 2. Open **Alarms**, enable Notifications and Exact alarms, and enable Lock-screen display. Try the 30-second test before relying on reminders.
 3. In **Agenda → Events**, tap **+ New event** to create a private event. Use **Birthdays → + New birthday** for annual birthdays or **Tasks → + New task** for quick capture. Each list opens its own creation form. Enabled, a five-minute reminder, a 60-minute duration, and the phone’s time zone are the defaults. The initial date/time is one hour ahead. Saving requires a connection and automatically syncs the event.
-4. The green **Next alarm** and blue **Next event** tiles show the earlier time on the left. After an alarm, the event stays visible as **Due soon** until its deadline. Past one-off events remain under **All**.
+4. The green **Next alarm** and blue **Next event** tiles show the earlier time on the left. Tap a populated summary tile to open that item’s details. After an alarm, the event stays visible as **Due soon** until its deadline. Past one-off events remain under **All**.
 5. To delete an event, refresh once to load permissions, expand its row, tap **Delete event**, and confirm. Recurring deletion removes the entire series; shared events are deleted for everyone and require group owner/admin rights.
 6. After scrolling down, use the small **↑ Back to top** button on the left; the create button stays on the right.
 7. Use the magnifying glass left of refresh to search all cached events, birthdays and tasks, including completed tasks; select a result to open its list and details. Tap a compact event row for details. **Today** uses the phone’s date. Refresh after changes made in PocketBase.
+
+8. Use Android **Back** to return from details, scrolled lists, Alarms or Account to the top of Agenda. Open forms, search and dialogs close first. Alarms and Account also offer **Return to main page**. Only Back from the main overview leaves TOKI. See the [navigation guide](docs/ANDROID_GUIDE.md#return-to-the-main-page).
 
 Expand an event and tap **Edit event** to update a regular event or birthday in Android; saving syncs changes and rebuilds reminders. Group event creation, memberships, and personal reminder preferences are managed in PocketBase. Background sync and all-day alarms are not implemented. See the [Android guide](android/README.md) for limitations and troubleshooting.
 
@@ -153,7 +155,7 @@ The suite creates disabled temporary deadlines with a `PBSEC-` prefix, updates t
 
 API tests cover authentication, own-record operations, cross-user and anonymous access attempts, recurrence exception persistence, and cleanup. Two local Python `dateutil` checks cover recurrence expansion and preservation of 09:00 Zurich time across the spring daylight-saving transition.
 
-The Python recurrence checks do not execute Android code or validate audible delivery. Android has separate unit and phone UI tests; the latest documentation verification on October 21, 2026 passed 45 unit tests and 21 navigation/form UI checks, plus the separate screenshot capture. See the [Android testing guide](android/README.md#build-and-verify). Ownership-transfer tests target another real user. List checks filter by the known temporary record ID to avoid pagination gaps, and anonymous list access must not expose that record. Unexpectedly created records are tracked for cleanup, with other configured users tried if ownership has changed. These checks do not constitute a complete security audit.
+The Python recurrence checks do not execute Android code or validate audible delivery. Android has separate unit and phone UI tests; navigation verification on October 22, 2026 passed 40 navigation/form UI checks, together with build and lint. The 45 unit tests and separate screenshot capture were last verified on October 21, 2026. See the [Android testing guide](android/README.md#build-and-verify). Ownership-transfer tests target another real user. List checks filter by the known temporary record ID to avoid pagination gaps, and anonymous list access must not expose that record. Unexpectedly created records are tracked for cleanup, with other configured users tried if ownership has changed. These checks do not constitute a complete security audit.
 
 ## Next steps
 

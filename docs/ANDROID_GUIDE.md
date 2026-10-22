@@ -8,9 +8,17 @@ For building, installation, recurrence details and troubleshooting, see the [And
 
 <img src="screenshots/android/agenda.png" alt="TOKI Agenda with next alarm, next event and next birthday tiles" width="300">
 
-The green **Next alarm** and blue **Next event** tiles put the earlier time on the left. The purple **Next birthday** tile shows the next birthday and upcoming age when the birth year is known. Tap a populated summary tile to jump to its list, scroll to that exact item and expand its details. Next alarm can open an event, birthday or task; Next event opens the event; Next birthday opens the birthday. Use the Android Back gesture or button to close those details and return to the list and position you came from. If a form or dialog is open, Back dismisses that first. Test-alarm, setup and empty-alarm tiles open alarm controls. An empty birthday tile opens the Birthdays list; an empty event tile has no detail action. Times use the phone's current time zone.
+The green **Next alarm** and blue **Next event** tiles put the earlier time on the left. The purple **Next birthday** tile shows the next birthday and upcoming age when the birth year is known. Tap a populated summary tile to jump to its list, scroll to that exact item and expand its details. Next alarm can open an event, birthday or task; Next event opens the event; Next birthday opens the birthday. Test-alarm, setup and empty-alarm tiles open alarm controls. An empty birthday tile opens the Birthdays list; an empty event tile has no detail action. Times use the phone's current time zone.
 
 An event stays visible until its deadline, even after its reminder rings. A birthday stays visible all day. Tasks stay active until you complete them.
+
+## Return to the main page
+
+Use Android **Back** (the system swipe gesture or Back button) to return from Alarms, Account, expanded item details or a scrolled list to the top of Agenda. This also works after opening an item from a summary tile or search result. Details collapse, event filters return to **Upcoming**, and tasks return to **Active**. The selected Events, Birthdays or Tasks list is preserved; returning from a summary item restores the list you were browsing before opening it.
+
+Alarms and Account also have a visible **Return to main page** button. Use the **Alarms** tab in the bottom navigation to open permission settings and the test-alarm controls.
+
+If a form, search screen or confirmation dialog is open, Back closes that first. A form being saved stays open until saving finishes. TOKI only uses normal Android exit behaviour when you press Back from the main Agenda overview at the top, with no expanded details or overlay open.
 
 ## Choose the right list
 
@@ -70,7 +78,7 @@ Results show **Event**, **Birthday** or **Task**, with **Completed** on finished
 
 <img src="screenshots/android/back-to-top.png" alt="A long birthday list with a small up-arrow button at lower left and New birthday at lower right" width="300">
 
-After scrolling down, the small **↑ Back to top** button appears at the lower left, opposite the create button. It smoothly returns to the top and keeps the selected Events, Birthdays or Tasks list. It disappears again near the top.
+After scrolling down, the small **↑ Back to top** button appears at the lower left, opposite the create button. It smoothly returns to the top and keeps the selected Events, Birthdays or Tasks list. It disappears again near the top. This scroll shortcut keeps your current filter and expanded details; use Android Back for the full return to the main page described above.
 
 ## Set up audible reminders
 

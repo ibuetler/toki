@@ -34,8 +34,9 @@ private fun priorityColor(priority: String) = when (priority) {
 private fun taskDate(millis: Long): String = DateTimeFormatter.ofPattern("d MMM yyyy · HH:mm")
     .format(Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()))
 
-@Composable internal fun TaskCard(task: TokiTask, busy: Boolean, now: Long, onComplete: (Boolean) -> Unit, onEdit: () -> Unit, onDelete: () -> Unit, focused: Boolean = false, revealVersion: Int = 0) {
+@Composable internal fun TaskCard(task: TokiTask, busy: Boolean, now: Long, onComplete: (Boolean) -> Unit, onEdit: () -> Unit, onDelete: () -> Unit, focused: Boolean = false, revealVersion: Int = 0, onExpansionChanged: (Boolean) -> Unit = {}) {
     var expanded by rememberSaveable(task.id) { mutableStateOf(focused) }
+    LaunchedEffect(expanded) { onExpansionChanged(expanded) }
     LaunchedEffect(focused, revealVersion) { if (focused) expanded = true else if (revealVersion > 0) expanded = false }
     Card(onClick = { expanded = !expanded }, modifier = Modifier.fillMaxWidth().testTag("task-${task.id}"),
         shape = MaterialTheme.shapes.small, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),

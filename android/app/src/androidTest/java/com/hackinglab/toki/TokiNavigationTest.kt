@@ -211,6 +211,68 @@ class TokiNavigationTest {
         screen.onNodeWithTag("next-event-tile").assertIsDisplayed()
         screen.onNodeWithText("+  New event").assertIsDisplayed()
     }
+    @Test fun backFromAlarmsAndAccountReturnsToMainPage() {
+        render()
+        for (section in listOf("Alarms", "Account")) {
+            screen.onNodeWithText(section, useUnmergedTree = true).performClick()
+            screen.onNodeWithText("Return to main page").assertIsDisplayed()
+            androidx.test.espresso.Espresso.pressBack()
+            screen.onNodeWithTag("next-event-tile").assertIsDisplayed()
+        }
+    }
+    @Test fun mainPageButtonReturnsFromSubpage() {
+        render()
+        screen.onNodeWithText("Account", useUnmergedTree = true).performClick()
+        screen.onNodeWithText("Return to main page").performClick()
+        screen.onNodeWithTag("next-event-tile").assertIsDisplayed()
+    }
+    @Test fun backFromManuallyExpandedEventClosesDetailsAndReturnsToTop() {
+        render()
+        screen.onNodeWithTag("event-one").performScrollTo().performClick()
+        screen.onNodeWithText("Edit event").performScrollTo().assertIsDisplayed()
+        androidx.test.espresso.Espresso.pressBack()
+        screen.onNodeWithTag("next-event-tile").assertIsDisplayed()
+        screen.onNodeWithTag("agenda-content").performScrollToNode(hasTestTag("event-one"))
+        screen.onNodeWithText("Edit event").assertDoesNotExist()
+    }
+    @Test fun backFromScrolledListReturnsToMainRatherThanExiting() {
+        render(longLists = true)
+        screen.onNodeWithTag("agenda-content").performScrollToNode(hasTestTag("event-extra29"))
+        androidx.test.espresso.Espresso.pressBack()
+        screen.onNodeWithTag("next-event-tile").assertIsDisplayed()
+    }
+    @Test fun backFromSearchReturnsToUnderlyingPageWithoutExiting() {
+        render()
+        screen.onNodeWithText("Account", useUnmergedTree = true).performClick()
+        screen.onNodeWithContentDescription("Search TOKI").performClick()
+        org.junit.Assert.assertTrue(InstrumentationRegistry.getInstrumentation().uiAutomation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK))
+        screen.waitUntil(timeoutMillis = 5_000) { screen.onAllNodesWithTag("search-results").fetchSemanticsNodes().isEmpty() }
+        screen.onNodeWithText("hello@example.com").performScrollTo().assertIsDisplayed()
+        org.junit.Assert.assertTrue(InstrumentationRegistry.getInstrumentation().uiAutomation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK))
+        screen.onNodeWithTag("next-event-tile").assertIsDisplayed()
+    }
+    @Test fun backFromTaskFormDoesNotExit() {
+        render()
+        screen.onNodeWithText("Tasks", useUnmergedTree = true).performScrollTo().performClick()
+        screen.onNodeWithText("+  New task").performClick()
+        androidx.test.espresso.Espresso.pressBack()
+        screen.onNodeWithText("+  New task").assertIsDisplayed()
+        screen.onNodeWithTag("agenda-content").assertExists()
+    }
+    @Test fun backFromMainAllowsNormalAndroidExit() {
+        render()
+        lateinit var activity: android.app.Activity
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            activity = androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry.getInstance()
+                .getActivitiesInStage(androidx.test.runner.lifecycle.Stage.RESUMED).first()
+        }
+        androidx.test.espresso.Espresso.pressBackUnconditionally()
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            org.junit.Assert.assertFalse(androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry.getInstance()
+                .getActivitiesInStage(androidx.test.runner.lifecycle.Stage.RESUMED).contains(activity))
+        }
+    }
     @Test fun backFromAlarmEventReturnsToMainPage() {
         render()
         screen.onNodeWithTag("next-alarm-tile").performClick()
