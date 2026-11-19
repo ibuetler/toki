@@ -184,6 +184,9 @@ class TokiNavigationTest {
     }
     @Test fun agendaSearchAndTabs() {
         render()
+        screen.onNodeWithTag("agenda-content").performScrollToNode(hasContentDescription("Alarm on"))
+        screen.onNodeWithContentDescription("Alarm on", useUnmergedTree = true).assertExists()
+        screen.onNodeWithTag("agenda-content").performScrollToIndex(0)
         screen.onNodeWithText("NEXT ALARM").assertIsDisplayed()
         screen.onNodeWithText("NEXT EVENT").assertIsDisplayed()
         screen.onNodeWithTag("next-event-tile").assertIsDisplayed()
@@ -199,7 +202,7 @@ class TokiNavigationTest {
         screen.onNodeWithText("Search events, birthdays and tasks").performTextInput("Family")
         screen.onNodeWithTag("search-event:two").performScrollTo().performClick()
         screen.onNodeWithText("2 events").performScrollTo().assertIsDisplayed()
-        screen.onNodeWithText("Off").assertExists()
+        screen.onNodeWithContentDescription("Alarm off", useUnmergedTree = true).assertExists()
         screen.onNodeWithText("Alarms", useUnmergedTree = true).performClick()
         screen.onNodeWithText("Alarms, on your terms.").assertIsDisplayed()
         snapshot("toki-alarms.png")
@@ -404,7 +407,13 @@ class TokiNavigationTest {
     }
     @Test fun summaryBirthdayTileOpensDetails() {
         render(includeBirthday = true)
+        screen.onNodeWithTag("next-birthday-tile").performScrollTo()
+        snapshot("toki-next-birthday-age.png")
+        screen.onNodeWithText("Turns ${java.time.LocalDate.now().year - 2000}", useUnmergedTree = true).assertIsDisplayed()
         screen.onNodeWithTag("next-birthday-tile").performClick()
+        screen.onAllNodesWithText("Turns ${java.time.LocalDate.now().year - 2000}", useUnmergedTree = true).onLast().assertIsDisplayed()
+        screen.onNodeWithText("Turning ${java.time.LocalDate.now().year - 2000}", useUnmergedTree = true).assertIsDisplayed()
+        snapshot("toki-birthday-age.png")
         screen.onNodeWithText("Turning ${java.time.LocalDate.now().year - 2000}").assertExists()
         screen.onNodeWithText("The reminder time has passed. This birthday stays here all day.").assertIsDisplayed()
         screen.onNodeWithText("+  New birthday").assertIsDisplayed()

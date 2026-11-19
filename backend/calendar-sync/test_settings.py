@@ -28,6 +28,13 @@ class SettingsTests(unittest.TestCase):
         with patch('import_calendars.socket.getaddrinfo',return_value=[(0,0,0,'',('127.0.0.1',443))]):
             with self.assertRaises(ValueError):validate_feed_url('https://outlook.office365.com/a',{'outlook.office365.com'})
 
+    def test_google_host_is_approved_without_approving_lookalikes(self):
+        hosts={'outlook.office365.com','calendar.google.com'}
+        with patch('import_calendars.socket.getaddrinfo',return_value=[(0,0,0,'',('142.250.185.110',443))]):
+            validate_feed_url('https://calendar.google.com/calendar/ical/example/public/basic.ics',hosts)
+        for url in ['https://calendar.google.com.evil.invalid/a.ics','https://google.com/a.ics','https://calendar.google.com:8090/a.ics']:
+            with self.assertRaises(ValueError):validate_feed_url(url,hosts)
+
     def test_failed_owner_keeps_records_while_other_owner_can_sync(self):
         owner='a'*15;other='b'*15
         class API:

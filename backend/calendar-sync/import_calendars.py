@@ -307,7 +307,7 @@ def database_sync(api, config, zone, start, end, limit, apply):
     rules = api.all_records('calendar_exclusions')
     owners = {s['owner'] for s in sources}
     desired, protected, statuses = {}, set(), []
-    allowed = set(config.get('sync', 'allowed_hosts', fallback='outlook.office365.com').split())
+    allowed = set(config.get('sync', 'allowed_hosts', fallback='outlook.office365.com calendar.google.com').split())
     for owner in owners:
         active = [s for s in sources if s['owner'] == owner and s['enabled']]
         snapshots = []

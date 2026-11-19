@@ -1,6 +1,6 @@
-FROM alpine:3.22
+FROM alpine:latest
 
-ARG PB_VERSION=0.40.5
+ARG PB_VERSION=0.40.6
 ARG TARGETARCH
 
 RUN apk add --no-cache \

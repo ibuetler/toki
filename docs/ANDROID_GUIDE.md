@@ -1,6 +1,6 @@
 # TOKI Android user guide
 
-TOKI keeps dated events, yearly birthdays and quick tasks in separate lists. This guide describes the Android app as of 22 October 2026. The original screens were captured on 21 October 2026; calendar settings, exclusions and hide/restore screens were captured on 22 October 2026. All images show real Compose screens on an Android phone with fictional sample data; no personal records or credentials are pictured.
+TOKI keeps dated events, yearly birthdays and quick tasks in separate lists. This guide describes the Android app as of 29 October 2026. The original screens were captured on 21 October 2026; calendar settings, exclusions and hide/restore screens were captured on 22 October 2026. All images show real Compose screens on an Android phone with fictional sample data; no personal records or credentials are pictured.
 
 For building, installation, recurrence details and troubleshooting, see the [Android technical guide](../android/README.md). The [iOS app](../ios/README.md) is currently an alarm prototype and does not yet provide these screens.
 
@@ -36,15 +36,15 @@ Each create button opens only the form for its selected list. There is no Event/
 
 Events sort by their displayed date and time. Date headings include the year; matching dates share a border color. Use **Upcoming**, **Today**, **Groups** or **All**. Past one-off events remain under All.
 
-Tap a row to expand its description, recurrence and reminder details. **Edit event** and **Delete event** appear for your own private events and group events you own/administer. Recurring edits and deletion apply to the whole series. Shared changes affect all members. Deletion asks for confirmation.
+A bell icon means the alarm is on; a crossed-out bell means it is off. Exception states such as Today, Due soon, Finished and Needs attention remain written labels. Tap a row to expand its description, recurrence and reminder details. **Edit event** and **Delete event** appear for your own private events and group events you own/administer. Recurring edits and deletion apply to the whole series. Shared changes affect all members. Deletion asks for confirmation.
 
 ### Birthdays
 
 <img src="screenshots/android/birthdays.png" alt="Birthdays list with cake icons, yearly labels and the New birthday button" width="300">
 
-Birthdays have cake icons and their own **Upcoming**, **Today** and **All** filters. A birthday remains visible until local midnight after its reminder. The reminder defaults to **09:00 in the phone's time zone** and repeats annually.
+Birthdays use compact two-line rows: the person’s name above the date, optional age badge and yearly label, with the bell/status at the right. The redundant “’s birthday” suffix is omitted from row headings; full details still show it. Rows have tighter padding while expanded details retain the large age banner. Birthdays have cake icons and their own **Upcoming**, **Today** and **All** filters. A birthday remains visible until local midnight after its reminder. The reminder defaults to **09:00 in the phone's time zone** and repeats annually.
 
-Tap a birthday to inspect its age, reminder time and notes, or edit/delete it. For February 29, choose February 28 or March 1 in non-leap years. See the [birthday model](../backend/BIRTHDAYS.md) for exact scheduling behaviour.
+When the birth year is known, a bold **Turns 54**-style badge appears on the birthday row and the Next birthday tile. Tap a birthday for a prominent **Turning 54** banner, reminder time and notes, or edit/delete it. No age is shown when the birth year is unknown. For February 29, choose February 28 or March 1 in non-leap years. See the [birthday model](../backend/BIRTHDAYS.md) for exact scheduling behaviour.
 
 ### Tasks
 
@@ -52,7 +52,7 @@ Tap a birthday to inspect its age, reminder time and notes, or edit/delete it. F
 
 Tasks are private and default to **Normal** priority. They sort **Urgent → High → Normal → Low**, newest first within each priority. Priority alone never rings an alarm.
 
-Check a task to move it to **Completed** and cancel its pending reminder on this phone. Uncheck it there to reopen it. A reminder that has already passed does not repeat. Tasks stay active after reminders, and completed tasks remain until manually deleted. Expand a row for **Edit task** and **Delete task**. See the [task model](../backend/TASKS.md).
+Check a task to move it to **Completed** and cancel its pending reminder on this phone. The checkbox immediately turns checked and colored, the title dims with a strike-through, and **Saving…** appears while PocketBase confirms completion. The row stays in place during that save, with repeated taps disabled. If saving fails, its previous appearance returns and an error explains how to retry. Uncheck it there to reopen it. A reminder that has already passed does not repeat. Tasks stay active after reminders, and completed tasks remain until manually deleted. Expand a row for **Edit task** and **Delete task**. See the [task model](../backend/TASKS.md).
 
 ## Create something new
 
@@ -88,7 +88,7 @@ Open **Alarms** and allow **Notifications** and **Exact alarms**. Allow **Lock-s
 
 Alarms use the phone's alarm volume, loop until dismissed, and stop after two minutes. DND, notification settings and device restrictions still apply. Cached reminders can ring offline; force-stopping the app prevents delivery until it is reopened.
 
-## Outlook calendar events
+## Imported calendar events
 
 Imported meetings appear in **Events**, with their source calendar names. A meeting shared across calendars appears once when its calendar identifiers match, with all matching sources listed. Imported items are read-only: make changes in Outlook. Your private exclusion rules can hide matching event titles across all your imported calendars or one selected source; manually created TOKI events are unaffected. After the next successful import, sync TOKI to remove excluded entries and their alarms. Removing an exclusion allows matching items to return. Manage them in **Account → Calendars & exclusions**, or read the [calendar integration guide](../backend/calendar-sync/README.md#title-exclusions-and-wildcard-patterns). Timed meetings ring five minutes before; all-day calendar entries have no alarm.
 
@@ -100,9 +100,11 @@ Jupiter checks the feeds every four hours by default. After that import, open TO
 | --- | --- |
 | <img src="screenshots/android/account.png" alt="Account screen with the Calendars and exclusions button" width="260"> | <img src="screenshots/android/calendar-connections.png" alt="Fictional Studio and Community calendar connections with import status and edit controls" width="260"> |
 
-Open **Account → Calendars & exclusions**. Add a calendar name and its published HTTPS ICS URL; it belongs automatically to your signed-in TOKI account. Edit, disable or remove connections there, and check their last import/error status. Links are masked in the form and never displayed in the connection list. Outlook publishing links are supported by default; other providers need administrator approval.
+Open **Account → Calendars & exclusions**. Add a calendar name and its published HTTPS ICS URL; it belongs automatically to your signed-in TOKI account. Edit, disable or remove connections there, and check their last import/error status. Links are masked in the form and never displayed in the connection list. Outlook and Google Calendar publishing links are approved by default; other providers need administrator approval.
 
 <img src="screenshots/android/new-calendar.png" alt="Add calendar form showing a fictional calendar name and a masked published ICS URL" width="300">
+
+For Google Calendar, copy **Secret address in iCal format** from its web settings under **Integrate calendar**, then paste it into **Add calendar**. Work/school accounts may restrict this option. Keep the address private.
 
 Tap **Add exclusion**, enter a title pattern and choose all your calendars or one source:
 

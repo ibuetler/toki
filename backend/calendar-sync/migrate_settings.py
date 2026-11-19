@@ -45,7 +45,7 @@ def migrate(path, apply=False):
         for record_id,payload in planned.items():
             if record_id not in existing[collection]:api.request('POST','/api/collections/'+collection+'/records',dict(payload,id=record_id))
     config['sync']['settings_source']='pocketbase'
-    config['sync']['allowed_hosts']=config.get('sync','allowed_hosts',fallback='outlook.office365.com')
+    config['sync']['allowed_hosts']=config.get('sync','allowed_hosts',fallback='outlook.office365.com calendar.google.com')
     for section in sections+['exclude']:
         config.remove_section(section)
     temporary=path.with_suffix('.ini.new')

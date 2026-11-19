@@ -21,6 +21,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -34,7 +35,11 @@ private fun priorityColor(priority: String) = when (priority) {
 private fun taskDate(millis: Long): String = DateTimeFormatter.ofPattern("d MMM yyyy · HH:mm")
     .format(Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()))
 
-@Composable internal fun TaskCard(task: TokiTask, busy: Boolean, now: Long, onComplete: (Boolean) -> Unit, onEdit: () -> Unit, onDelete: () -> Unit, focused: Boolean = false, revealVersion: Int = 0, onExpansionChanged: (Boolean) -> Unit = {}) {
+@Composable internal fun TaskCard(task: TokiTask, busy: Boolean, now: Long, onComplete: (Boolean) -> Unit, onEdit: () -> Unit, onDelete: () -> Unit, focused: Boolean = false, revealVersion: Int = 0, onExpansionChanged: (Boolean) -> Unit = {}, pendingCompletion: Boolean? = null) {
+    val displayedCompleted = pendingCompletion ?: task.completed
+    val savingCompletion = pendingCompletion != null
+    val titleColor = if (displayedCompleted) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .65f) else MaterialTheme.colorScheme.onSurface
+    val titleDecoration = if (displayedCompleted) TextDecoration.LineThrough else null
     var expanded by rememberSaveable(task.id) { mutableStateOf(focused) }
     LaunchedEffect(expanded) { onExpansionChanged(expanded) }
     LaunchedEffect(focused, revealVersion) { if (focused) expanded = true else if (revealVersion > 0) expanded = false }
@@ -43,14 +48,16 @@ private fun taskDate(millis: Long): String = DateTimeFormatter.ofPattern("d MMM 
         border = BorderStroke(1.5.dp, priorityColor(task.priority))) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(Modifier.heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Checkbox(checked = task.completed, onCheckedChange = onComplete, enabled = !busy,
-                    modifier = Modifier.semantics { contentDescription = if (task.completed) "Reopen ${task.title}" else "Complete ${task.title}" })
+                Checkbox(checked = displayedCompleted, onCheckedChange = onComplete, enabled = !busy && !savingCompletion,
+                    colors = if (savingCompletion) CheckboxDefaults.colors(disabledCheckedColor = MaterialTheme.colorScheme.primary, disabledUncheckedColor = MaterialTheme.colorScheme.primary) else CheckboxDefaults.colors(),
+                    modifier = Modifier.semantics { contentDescription = if (displayedCompleted) "Reopen ${task.title}" else "Complete ${task.title}" })
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(task.title, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = titleColor, textDecoration = titleDecoration)
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(painterResource(R.drawable.ic_lock), contentDescription = null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.primary)
                         Text("Private · " + when {
+                            savingCompletion -> if (displayedCompleted) "Saving…" else "Reopening…"
                             task.completed -> "Completed"
                             task.reminderMillis == 0L -> "No reminder"
                             task.reminderMillis <= now -> "Reminder passed"
@@ -66,9 +73,10 @@ private fun taskDate(millis: Long): String = DateTimeFormatter.ofPattern("d MMM 
             }
             if (expanded) {
                 HorizontalDivider()
-                Text(task.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(task.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = titleColor, textDecoration = titleDecoration)
                 if (task.reminderMillis > 0) Text(
-                    if (task.completed) "Completed. Its reminder is cancelled."
+                    if (savingCompletion) "Saving task status…"
+                    else if (task.completed) "Completed. Its reminder is cancelled."
                     else if (task.reminderMillis <= now) "The reminder time has passed. This task stays active until you complete it."
                     else "Reminder ${taskDate(task.reminderMillis)}", style = MaterialTheme.typography.bodyMedium)
                 if (task.notes.isNotBlank()) Text(task.notes, color = MaterialTheme.colorScheme.onSurfaceVariant)

@@ -13,7 +13,7 @@ import kotlinx.coroutines.withContext
 
 data class EventPreview(val nextStart: Long? = null, val problem: String? = null, val nextReminderStart: Long? = null, val visibleUntil: Long? = null)
 
-data class TokiState(val calendarSettings: CalendarSettings? = null, val settingsBusy: Boolean = false, val settingsError: String? = null, val settingsSavedVersion: Int = 0, val calendarHidingAvailable: Boolean = false, val tasks: List<TokiTask> = emptyList(), val tasksAvailable: Boolean = false, val taskError: String? = null, val taskSavedVersion: Int = 0, val editing: EditableEvent? = null, val editError: String? = null, val birthdaysAvailable: Boolean = false, val deletableIds: Set<String> = emptySet(), val deletePermissionsLoaded: Boolean = false, val createError: String? = null, val createdVersion: Int = 0, val ready: Boolean = false, val session: Session? = null,
+data class TokiState(val pendingTaskCompletions: Map<String, Boolean> = emptyMap(), val calendarSettings: CalendarSettings? = null, val settingsBusy: Boolean = false, val settingsError: String? = null, val settingsSavedVersion: Int = 0, val calendarHidingAvailable: Boolean = false, val tasks: List<TokiTask> = emptyList(), val tasksAvailable: Boolean = false, val taskError: String? = null, val taskSavedVersion: Int = 0, val editing: EditableEvent? = null, val editError: String? = null, val birthdaysAvailable: Boolean = false, val deletableIds: Set<String> = emptySet(), val deletePermissionsLoaded: Boolean = false, val createError: String? = null, val createdVersion: Int = 0, val ready: Boolean = false, val session: Session? = null,
     val deadlines: List<Deadline> = emptyList(), val busy: Boolean = false,
     val message: String? = null, val lastSync: Long = 0, val scheduled: Int = 0,
     val exactAllowed: Boolean = false, val notificationsAllowed: Boolean = false, val fullScreenAllowed: Boolean = false, val testAt: Long = 0, val testDelay: Long = -1, val previews: Map<String, EventPreview> = emptyMap())
@@ -120,9 +120,9 @@ class TokiViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
     fun clearTaskError() { mutable.value = mutable.value.copy(taskError = null) }
-    private fun taskAction(form: Boolean = false, work: (Session, () -> Unit) -> Unit) {
+    private fun taskAction(form: Boolean = false, completion: Pair<String, Boolean>? = null, work: (Session, () -> Unit) -> Unit) {
         if (mutable.value.busy) return
-        mutable.value = mutable.value.copy(busy = true, message = null, taskError = null)
+        mutable.value = mutable.value.copy(busy = true, message = null, taskError = null, pendingTaskCompletions = completion?.let { mapOf(it) } ?: emptyMap())
         viewModelScope.launch {
             var saved = false
             try {
@@ -142,10 +142,11 @@ class TokiViewModel(application: Application) : AndroidViewModel(application) {
                     error is ApiFailure && error.status in listOf(403, 404) -> "Task unavailable or permission denied. Cancel and Sync to refresh."
                     error is ApiFailure && error.status == 400 -> "PocketBase rejected the task. Check its details."
                     error is ApiFailure && error.status == 401 -> "Your session expired. Sign in again."
+                    completion != null -> "Could not confirm task status. Previous appearance restored; Sync before retrying."
                     else -> "Could not confirm the change. Sync before retrying; your draft is still here."
                 }
                 mutable.value = if (form && !saved) mutable.value.copy(taskError = message) else mutable.value.copy(message = message)
-            } finally { mutable.value = mutable.value.copy(busy = false) }
+            } finally { mutable.value = mutable.value.copy(busy = false, pendingTaskCompletions = emptyMap()) }
         }
     }
     fun saveTask(draft: TaskDraft, id: String?) {
@@ -163,7 +164,7 @@ class TokiViewModel(application: Application) : AndroidViewModel(application) {
     }
     fun completeTask(id: String, completed: Boolean) {
         if (mutable.value.tasks.none { it.id == id }) return
-        taskAction { session, confirmed ->
+        taskAction(completion = id to completed) { session, confirmed ->
             val task = graph.api.completeTask(session, id, completed)
             confirmed()
             graph.saveLocalTask(task, session.userId)

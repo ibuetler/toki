@@ -319,7 +319,7 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
                         if (tasks.isEmpty()) item { Text(if (completedTasks) "No completed tasks." else "A clear head starts here. Tap + New task to capture a thought.", style = MaterialTheme.typography.bodyMedium) }
                         items(tasks, key = { "task:${it.id}" }) { task ->
                             TaskCard(task, state.busy, now, { onCompleteTask(task.id, it) },
-                                { editingTaskId = task.id; onClearTaskError(); taskForm = true }, { deletingTaskId = task.id }, focused = revealId == "task:${task.id}", revealVersion = revealVersion, onExpansionChanged = { recordExpansion("task:${task.id}", it) })
+                                { editingTaskId = task.id; onClearTaskError(); taskForm = true }, { deletingTaskId = task.id }, focused = revealId == "task:${task.id}", revealVersion = revealVersion, onExpansionChanged = { recordExpansion("task:${task.id}", it) }, pendingCompletion = state.pendingTaskCompletions[task.id])
                         }
                     } else {
                     item { LazyRow(Modifier.testTag("event-filters"), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -407,6 +407,15 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
     else Surface(modifier = modifier, shape = MaterialTheme.shapes.medium, color = colors.first(), content = content)
 }
 
+@Composable private fun BirthdayAgeBadge(age: Int, modifier: Modifier = Modifier,
+    containerColor: Color = MaterialTheme.colorScheme.tertiaryContainer,
+    contentColor: Color = MaterialTheme.colorScheme.onTertiaryContainer) {
+    Surface(modifier = modifier, color = containerColor, contentColor = contentColor, shape = CircleShape) {
+        Text("Turns $age", Modifier.widthIn(max = 82.dp).padding(horizontal = 8.dp, vertical = 5.dp),
+            style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
+    }
+}
+
 @Composable private fun BirthdayTile(next: Pair<Deadline, Long>?, now: Long, onClick: () -> Unit) {
     val accent = Color(0xFFF6D6F1)
     Surface(onClick = onClick, modifier = Modifier.fillMaxWidth().testTag("next-birthday-tile"), shape = MaterialTheme.shapes.medium, color = Color(0xFF643663)) {
@@ -423,7 +432,7 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
                 val days = java.time.temporal.ChronoUnit.DAYS.between(Instant.ofEpochMilli(now).atZone(zone).toLocalDate(), Instant.ofEpochMilli(next.second).atZone(zone).toLocalDate())
                 Text(if (days <= 0) "Today" else "In $days ${if (days == 1L) "day" else "days"}", color = Color.White, style = MaterialTheme.typography.labelMedium)
                 val age = com.hackinglab.toki.data.BirthdaySpec.from(next.first).ageOn(next.second)
-                if (age != null) Text("Turns $age", color = accent, style = MaterialTheme.typography.labelSmall)
+                if (age != null) BirthdayAgeBadge(age, Modifier.testTag("next-birthday-age"), accent, Color(0xFF513052))
             }
             Glyph(R.drawable.ic_arrow, Modifier.size(16.dp), accent)
         }
@@ -496,27 +505,44 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
     LaunchedEffect(expanded) { onExpansionChanged(expanded) }
     LaunchedEffect(focused, revealVersion) { if (focused) expanded = true else if (revealVersion > 0) expanded = false }
     val time = preview?.nextStart ?: event.startMillis
+    val birthdayAge = if (event.kind == "birthday" && preview?.problem == null && time > 0) BirthdaySpec.from(event).ageOn(time) else null
     val reminderPassed = preview?.nextStart != null && EventTime.reminderAt(preview.nextStart, event.reminderMinutes) <= now
     val status = when { event.hidden -> "Hidden"; event.kind == "calendar" && event.allDay -> "All day"; !event.enabled -> "Off"; preview?.problem != null -> "Needs attention"; preview?.nextStart == null -> "Finished"; reminderPassed -> if (event.kind == "birthday") "Today" else "Due soon"; !permissionsReady -> "Setup needed"; else -> "Alarm on" }
     val active = status == "Alarm on"
     Card(border = BorderStroke(1.5.dp, dateColor), modifier = Modifier.testTag("event-${event.id}"), shape = MaterialTheme.shapes.small, onClick = { expanded = !expanded }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = if (event.kind == "birthday" && !expanded) 4.dp else 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(Modifier.heightIn(min = 48.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.widthIn(min = 50.dp)) {
-                    if (event.kind == "birthday") Glyph(R.drawable.ic_cake, Modifier.size(24.dp))
-                    else Text(if (event.allDay) "All day" else date(time, pattern = "HH:mm"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text(date(time, pattern = if (Instant.ofEpochMilli(time).atZone(ZoneId.systemDefault()).year == Instant.ofEpochMilli(now).atZone(ZoneId.systemDefault()).year) "d MMM" else "d MMM yy"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(event.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Glyph(if (event.groupName.isBlank()) R.drawable.ic_lock else R.drawable.ic_group, Modifier.size(12.dp))
-                        Text("${event.sourceNames.ifBlank { event.groupName.ifBlank { "Private" } }} · ${if (event.kind == "birthday") "Yearly" else if (event.rrule.isBlank()) "One-time" else repeatLabel(event.rrule)}",
-                            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Column(Modifier.widthIn(min = if (event.kind == "birthday") 24.dp else 50.dp)) {
+                    if (event.kind == "birthday") Glyph(R.drawable.ic_cake, Modifier.size(20.dp))
+                    else {
+                        Text(if (event.allDay) "All day" else date(time, pattern = "HH:mm"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(date(time, pattern = if (Instant.ofEpochMilli(time).atZone(ZoneId.systemDefault()).year == Instant.ofEpochMilli(now).atZone(ZoneId.systemDefault()).year) "d MMM" else "d MMM yy"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-                Surface(color = if (active) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer, shape = CircleShape) {
-                    Text(status, Modifier.widthIn(max = 82.dp).padding(horizontal = 8.dp, vertical = 5.dp), style = MaterialTheme.typography.labelSmall)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(if (event.kind == "birthday") event.title.removeSuffix("’s birthday").removeSuffix("'s birthday") else event.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        if (event.kind == "birthday") {
+                            Text(date(time, pattern = "d MMM"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (birthdayAge != null) BirthdayAgeBadge(birthdayAge, Modifier.testTag("birthday-age-${event.id}"))
+                            Text("Private · Yearly", Modifier.weight(1f), style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        } else {
+                            Glyph(if (event.groupName.isBlank()) R.drawable.ic_lock else R.drawable.ic_group, Modifier.size(12.dp))
+                            Text("${event.sourceNames.ifBlank { event.groupName.ifBlank { "Private" } }} · ${if (event.rrule.isBlank()) "One-time" else repeatLabel(event.rrule)}",
+                                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                }
+                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Surface(color = if (active) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer, shape = CircleShape) {
+                        if (status == "Alarm on" || status == "Off") Icon(
+                            painterResource(if (active) R.drawable.ic_bell else R.drawable.ic_bell_off),
+                            contentDescription = if (active) "Alarm on" else "Alarm off",
+                            modifier = Modifier.padding(5.dp).size(16.dp),
+                            tint = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                        else Text(status, Modifier.widthIn(max = 82.dp).padding(horizontal = 8.dp, vertical = 5.dp), style = MaterialTheme.typography.labelSmall)
+                    }
                 }
             }
             if (expanded) {
@@ -529,8 +555,16 @@ internal fun TokiScreen(state: TokiState, onLogin: (String, String) -> Unit, onS
                 }
                 if (event.kind == "birthday") {
                     val birthday = com.hackinglab.toki.data.BirthdaySpec.from(event)
-                    val age = birthday.ageOn(time)
-                    if (age != null) Text("Turning $age", style = MaterialTheme.typography.bodyMedium)
+                    if (birthdayAge != null) Surface(
+                        modifier = Modifier.fillMaxWidth().testTag("birthday-age-details-${event.id}"),
+                        color = MaterialTheme.colorScheme.tertiaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                        shape = MaterialTheme.shapes.small) {
+                        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Glyph(R.drawable.ic_cake, Modifier.size(28.dp), MaterialTheme.colorScheme.onTertiaryContainer)
+                            Text("Turning $birthdayAge", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                        }
+                    }
                     Text("Reminder at ${"%02d:%02d".format(birthday.hour, birthday.minute)} in your phone’s local time zone.", style = MaterialTheme.typography.bodyMedium)
                     if (birthday.month == 2 && birthday.day == 29) Text("In non-leap years: ${if (birthday.leapDayPolicy == "mar1") "March 1" else "February 28"}.", style = MaterialTheme.typography.bodySmall)
                 }

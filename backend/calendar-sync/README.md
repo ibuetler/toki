@@ -1,4 +1,4 @@
-# Outlook calendar imports
+# Outlook and Google calendar imports
 
 Users manage their private published-calendar URLs and title exclusions in **Android → Account → Calendars & exclusions**. PocketBase stores connections and rules; Jupiter fetches the feeds every four hours. Android syncs when opened or manually refreshed and does not poll in the background.
 
@@ -11,6 +11,12 @@ Users manage their private published-calendar URLs and title exclusions in **And
 - Writes require connectivity. Link drafts stay in memory instead of saved-instance state; connection URLs are not stored in the Android event cache.
 
 Published URLs are credentials: anyone possessing one can read the published feed. The owner-private `calendar_sources` collection contains owner, name, URL, enabled and server-managed import status. Normal clients cannot transfer ownership or forge status fields. Account deletion cascades to its sources and rules. Do not export these records or URLs into Git or logs.
+
+## Add a Google Calendar
+
+On a computer, open Google Calendar → **Settings → Settings for my calendars → select the calendar → Integrate calendar**. Copy **Secret address in iCal format**, then add it in TOKI under **Account → Calendars & exclusions → Add calendar**. Use the HTTPS ICS subscription address, not the browser calendar page or an embedded-calendar link. Google Workspace administrators may restrict availability of the secret address. See [Google's instructions](https://support.google.com/calendar/answer/37648).
+
+The secret address grants read access and must stay private. Do not paste it into Git, logs or shared documentation. Google imports use the same four-hour schedule, reminder policy, duplicate matching, wildcard rules and personal hide preferences as other feeds. Calendar publication can introduce additional delay. Provider approval does not verify a user's particular feed: an actual subscription is checked when the importer fetches it.
 
 ## Title exclusions and wildcard patterns
 
@@ -68,14 +74,14 @@ password = PRIVATE_SERVICE_PASSWORD
 
 [sync]
 settings_source = pocketbase
-allowed_hosts = outlook.office365.com
+allowed_hosts = outlook.office365.com calendar.google.com
 past_days = 7
 future_days = 366
 timezone = Europe/Zurich
 max_occurrences = 20000
 ```
 
-The dedicated importer superuser performs reconciliation; Android uses normal user credentials. Treat the service identity as a server-administration secret. HTTPS feed hosts must be explicitly approved in `allowed_hosts` (whitespace-separated hostnames); Outlook is approved by default. Credentials in URLs, nonstandard ports, fragments, redirects and private/reserved DNS addresses are rejected before fetching user-managed feeds. Additional providers require administrator approval, not a user-controlled allowlist.
+The dedicated importer superuser performs reconciliation; Android uses normal user credentials. Treat the service identity as a server-administration secret. HTTPS feed hosts must be explicitly approved in `allowed_hosts` (whitespace-separated hostnames); Outlook (`outlook.office365.com`) and Google Calendar (`calendar.google.com`) are approved by default. Credentials in URLs, nonstandard ports, fragments, redirects and private/reserved DNS addresses are rejected before fetching user-managed feeds. Additional providers require administrator approval, not a user-controlled allowlist.
 
 ## Run manually and change the schedule
 
@@ -176,3 +182,5 @@ python3 backend/scripts/test_migration_snapshot.py
 The disposable `test_backend.py` lifecycle suite needs `TOKI_TEST_URL`, `TOKI_TEST_EMAIL` and `TOKI_TEST_PASSWORD` pointing only at an isolated backend with all migrations installed. It verifies private URLs/rules, denied ownership/status changes, source scoping, deletion cascades, hide persistence and event reconciliation. Never run that provisioning test against production. Android tests cover wildcard preview/scoping and connection forms with fictional data.
 
 Validation on 22 October 2026 passed 24 importer/settings unit cases, the disposable-backend lifecycle/privacy suite, 53 Android unit tests and 52 phone UI/API/cache checks (one activity-availability failure passed on targeted retry). Build and lint passed. Migration and runtime checks preserved the existing imported occurrences.
+
+On 29 October 2026, `calendar.google.com` was approved on Jupiter while preserving the existing host list and four-hour timer. All 25 importer/settings tests passed, and a public Google holiday feed fetched and parsed successfully (29 occurrences in the test window). The public test feed was not imported into PocketBase. Private subscription URLs still require validation during their first import.

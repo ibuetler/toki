@@ -6,7 +6,7 @@ password = REPLACE_LOCALLY
 [sync]
 # User connections and exclusion patterns are managed through Android/PocketBase.
 settings_source = pocketbase
-allowed_hosts = outlook.office365.com
+allowed_hosts = outlook.office365.com calendar.google.com
 # A bounded horizon keeps yearly/unbounded recurring calendars finite.
 past_days = 7
 future_days = 366
